@@ -1,7 +1,17 @@
 import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Trophy, Home, Target, BarChart3, Settings, LogOut } from "lucide-react";
+import { Trophy, Home, Target, BarChart3, Settings, LogOut, User } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface LayoutProps {
   children: ReactNode;
@@ -10,9 +20,10 @@ interface LayoutProps {
 export const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { profile, isAdmin, signOut } = useAuth();
 
-  const handleLogout = () => {
-    // Mock logout - remover quando integrar backend
+  const handleLogout = async () => {
+    await signOut();
     navigate("/auth");
   };
 
@@ -20,8 +31,17 @@ export const Layout = ({ children }: LayoutProps) => {
     { path: "/", icon: Home, label: "Dashboard" },
     { path: "/palpites", icon: Target, label: "Palpites" },
     { path: "/ranking", icon: BarChart3, label: "Ranking" },
-    { path: "/admin", icon: Settings, label: "Admin" },
+    ...(isAdmin ? [{ path: "/admin", icon: Settings, label: "Admin" }] : []),
   ];
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,9 +78,31 @@ export const Layout = ({ children }: LayoutProps) => {
               })}
             </nav>
 
-            <Button variant="ghost" size="icon" onClick={handleLogout}>
-              <LogOut className="h-5 w-5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      {profile ? getInitials(profile.nome) : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden sm:inline-block">{profile?.nickname || "Usuário"}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span>{profile?.nome}</span>
+                    <span className="text-xs text-muted-foreground">@{profile?.nickname}</span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
