@@ -2,31 +2,35 @@ import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, Target, Calendar, Info } from "lucide-react";
+import { Trophy, Target, Calendar, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogos";
+import { useTopRanking } from "@/hooks/useRanking";
+import { useMeusPalpites } from "@/hooks/usePalpites";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function Dashboard() {
-  // Mock data
-  const userRanking = { posicao: 3, pontos: 42, nome: "Você" };
-  const proximaRodada = {
-    numero: 15,
-    dataFechamento: "2024-05-20T19:00:00",
-    jogos: 10,
+  const { profile } = useAuth();
+  const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
+  const { data: proximosJogos, isLoading: loadingJogos } = useProximosJogos(3);
+  const { data: topRanking, isLoading: loadingRanking } = useTopRanking(5);
+  const { data: meusPalpites } = useMeusPalpites(rodadaAtual?.id);
+
+  const palpitesFeitos = meusPalpites?.length || 0;
+  const totalJogos = proximosJogos?.length || 0;
+
+  // Find user position in ranking
+  const userPosition = topRanking?.findIndex(r => r.nickname === profile?.nickname);
+  const userRankingData = userPosition !== undefined && userPosition >= 0 
+    ? topRanking?.[userPosition] 
+    : null;
+
+  const formatGameDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return format(date, "dd/MM HH:mm", { locale: ptBR });
   };
-
-  const topRanking = [
-    { posicao: 1, nome: "João Silva", pontos: 58 },
-    { posicao: 2, nome: "Maria Santos", pontos: 51 },
-    { posicao: 3, nome: "Você", pontos: 42 },
-    { posicao: 4, nome: "Carlos Souza", pontos: 39 },
-    { posicao: 5, nome: "Ana Costa", pontos: 35 },
-  ];
-
-  const proximosJogos = [
-    { id: 1, casa: "Flamengo", visitante: "Palmeiras", data: "20/05 16:00" },
-    { id: 2, casa: "São Paulo", visitante: "Corinthians", data: "20/05 18:30" },
-    { id: 3, casa: "Grêmio", visitante: "Internacional", data: "20/05 20:00" },
-  ];
 
   return (
     <Layout>
@@ -35,7 +39,7 @@ export default function Dashboard() {
         <div className="rounded-lg bg-gradient-brasil p-8 text-center shadow-card">
           <Trophy className="mx-auto mb-4 h-12 w-12 text-primary-foreground" />
           <h1 className="mb-2 text-3xl font-bold text-primary-foreground">
-            Bem-vindo ao Bolão!
+            Bem-vindo, {profile?.nome?.split(" ")[0]}!
           </h1>
           <p className="text-primary-foreground/90">
             Faça seus palpites e dispute o topo do ranking com seus amigos
@@ -50,10 +54,23 @@ export default function Dashboard() {
               <Trophy className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userRanking.posicao}º Lugar</div>
-              <p className="text-xs text-muted-foreground">
-                {userRanking.pontos} pontos acumulados
-              </p>
+              {loadingRanking ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : userRankingData ? (
+                <>
+                  <div className="text-2xl font-bold">{(userPosition || 0) + 1}º Lugar</div>
+                  <p className="text-xs text-muted-foreground">
+                    {userRankingData.total_pontos} pontos acumulados
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">-</div>
+                  <p className="text-xs text-muted-foreground">
+                    Faça seus palpites para entrar no ranking
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -63,10 +80,23 @@ export default function Dashboard() {
               <Calendar className="h-4 w-4 text-secondary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">Rodada {proximaRodada.numero}</div>
-              <p className="text-xs text-muted-foreground">
-                {proximaRodada.jogos} jogos disponíveis
-              </p>
+              {loadingRodada ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : rodadaAtual ? (
+                <>
+                  <div className="text-2xl font-bold">Rodada {rodadaAtual.numero}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Status: {rodadaAtual.status.replace("_", " ")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">-</div>
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma rodada disponível
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -76,7 +106,7 @@ export default function Dashboard() {
               <Target className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3 / 10</div>
+              <div className="text-2xl font-bold">{palpitesFeitos} / {totalJogos || "?"}</div>
               <p className="text-xs text-muted-foreground">
                 palpites feitos nesta rodada
               </p>
@@ -93,22 +123,27 @@ export default function Dashboard() {
                 Fazer Palpites
               </CardTitle>
               <CardDescription>
-                Rodada {proximaRodada.numero} - Fecha em 20/05 às 19:00
+                {rodadaAtual 
+                  ? `Rodada ${rodadaAtual.numero}` 
+                  : "Aguardando próxima rodada"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Progresso</span>
-                  <span className="font-medium">3 de 10 jogos</span>
+                  <span className="font-medium">{palpitesFeitos} de {totalJogos || "?"} jogos</span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div className="h-full w-[30%] rounded-full bg-gradient-brasil" />
+                  <div 
+                    className="h-full rounded-full bg-gradient-brasil transition-all" 
+                    style={{ width: totalJogos ? `${(palpitesFeitos / totalJogos) * 100}%` : "0%" }}
+                  />
                 </div>
               </div>
               <Link to="/palpites">
                 <Button className="w-full" size="lg">
-                  Continuar Palpites
+                  {palpitesFeitos > 0 ? "Continuar Palpites" : "Fazer Palpites"}
                 </Button>
               </Link>
             </CardContent>
@@ -124,24 +159,36 @@ export default function Dashboard() {
               <CardDescription>Classificação geral do bolão</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {topRanking.map((user) => (
-                  <div
-                    key={user.posicao}
-                    className="flex items-center justify-between rounded-lg border border-border p-3 transition-smooth hover:bg-muted/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Badge variant={user.posicao === 1 ? "default" : "secondary"}>
-                        {user.posicao}º
-                      </Badge>
-                      <span className={user.nome === "Você" ? "font-bold" : ""}>
-                        {user.nome}
-                      </span>
+              {loadingRanking ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : topRanking && topRanking.length > 0 ? (
+                <div className="space-y-3">
+                  {topRanking.map((user, index) => (
+                    <div
+                      key={user.user_id}
+                      className={`flex items-center justify-between rounded-lg border border-border p-3 transition-smooth hover:bg-muted/50 ${
+                        user.nickname === profile?.nickname ? "bg-primary/5 border-primary/20" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Badge variant={index === 0 ? "default" : "secondary"}>
+                          {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}º`}
+                        </Badge>
+                        <span className={user.nickname === profile?.nickname ? "font-bold" : ""}>
+                          @{user.nickname}
+                        </span>
+                      </div>
+                      <span className="font-bold text-primary">{user.total_pontos} pts</span>
                     </div>
-                    <span className="font-bold text-primary">{user.pontos} pts</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-4">
+                  Nenhum participante ainda
+                </p>
+              )}
               <Link to="/ranking">
                 <Button variant="outline" className="w-full mt-4">
                   Ver Ranking Completo
@@ -157,23 +204,35 @@ export default function Dashboard() {
                 <Calendar className="h-5 w-5 text-secondary" />
                 Próximos Jogos
               </CardTitle>
-              <CardDescription>Rodada {proximaRodada.numero}</CardDescription>
+              <CardDescription>
+                {rodadaAtual ? `Rodada ${rodadaAtual.numero}` : ""}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {proximosJogos.map((jogo) => (
-                  <div
-                    key={jogo.id}
-                    className="flex items-center justify-between rounded-lg border border-border p-3"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium">{jogo.casa}</div>
-                      <div className="text-sm text-muted-foreground">vs {jogo.visitante}</div>
+              {loadingJogos ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : proximosJogos && proximosJogos.length > 0 ? (
+                <div className="space-y-3">
+                  {proximosJogos.map((jogo) => (
+                    <div
+                      key={jogo.id}
+                      className="flex items-center justify-between rounded-lg border border-border p-3"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">{jogo.time_casa}</div>
+                        <div className="text-sm text-muted-foreground">vs {jogo.time_visitante}</div>
+                      </div>
+                      <Badge variant="outline">{formatGameDate(jogo.data_jogo)}</Badge>
                     </div>
-                    <Badge variant="outline">{jogo.data}</Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-4">
+                  Nenhum jogo agendado
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -197,19 +256,15 @@ export default function Dashboard() {
                   <span className="text-sm font-medium">Acertou apenas resultado</span>
                   <Badge variant="secondary">3 pontos</Badge>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-muted">
-                  <span className="text-sm font-medium">Acertou apenas placar</span>
-                  <Badge variant="secondary">2 pontos</Badge>
-                </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-gradient-loss">
                   <span className="text-sm font-medium text-destructive-foreground">
-                    Errou tudo
+                    Errou resultado
                   </span>
                   <Badge className="bg-destructive-foreground text-destructive">0 pontos</Badge>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-4">
-                Os palpites fecham 1 minuto antes do início de cada rodada.
+                Os palpites fecham 1 minuto antes do início de cada jogo.
                 Faça seus palpites com antecedência!
               </p>
             </CardContent>
