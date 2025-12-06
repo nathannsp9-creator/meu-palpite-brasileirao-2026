@@ -14,16 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      jogos: {
+        Row: {
+          api_fixture_id: number | null
+          created_at: string
+          data_jogo: string
+          id: string
+          logo_casa: string | null
+          logo_visitante: string | null
+          placar_casa: number | null
+          placar_visitante: number | null
+          rodada_id: string
+          status: Database["public"]["Enums"]["game_status"]
+          time_casa: string
+          time_visitante: string
+          updated_at: string
+        }
+        Insert: {
+          api_fixture_id?: number | null
+          created_at?: string
+          data_jogo: string
+          id?: string
+          logo_casa?: string | null
+          logo_visitante?: string | null
+          placar_casa?: number | null
+          placar_visitante?: number | null
+          rodada_id: string
+          status?: Database["public"]["Enums"]["game_status"]
+          time_casa: string
+          time_visitante: string
+          updated_at?: string
+        }
+        Update: {
+          api_fixture_id?: number | null
+          created_at?: string
+          data_jogo?: string
+          id?: string
+          logo_casa?: string | null
+          logo_visitante?: string | null
+          placar_casa?: number | null
+          placar_visitante?: number | null
+          rodada_id?: string
+          status?: Database["public"]["Enums"]["game_status"]
+          time_casa?: string
+          time_visitante?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jogos_rodada_id_fkey"
+            columns: ["rodada_id"]
+            isOneToOne: false
+            referencedRelation: "rodadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      palpites: {
+        Row: {
+          created_at: string
+          id: string
+          jogo_id: string
+          palpite_casa: number
+          palpite_visitante: number
+          pontos_obtidos: number | null
+          updated_at: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jogo_id: string
+          palpite_casa: number
+          palpite_visitante: number
+          pontos_obtidos?: number | null
+          updated_at?: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jogo_id?: string
+          palpite_casa?: number
+          palpite_visitante?: number
+          pontos_obtidos?: number | null
+          updated_at?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "palpites_jogo_id_fkey"
+            columns: ["jogo_id"]
+            isOneToOne: false
+            referencedRelation: "jogos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          id: string
+          nickname: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          id: string
+          nickname: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          nickname?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rodadas: {
+        Row: {
+          created_at: string
+          data_fim: string | null
+          data_inicio: string | null
+          id: string
+          numero: number
+          status: Database["public"]["Enums"]["round_status"]
+        }
+        Insert: {
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          id?: string
+          numero: number
+          status?: Database["public"]["Enums"]["round_status"]
+        }
+        Update: {
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          id?: string
+          numero?: number
+          status?: Database["public"]["Enums"]["round_status"]
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calcular_pontos: {
+        Args: {
+          palpite_casa: number
+          palpite_visitante: number
+          placar_casa: number
+          placar_visitante: number
+        }
+        Returns: number
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
+      game_status: "agendado" | "ao_vivo" | "finalizado"
+      round_status: "futura" | "em_andamento" | "finalizada"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +335,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+      game_status: ["agendado", "ao_vivo", "finalizado"],
+      round_status: ["futura", "em_andamento", "finalizada"],
+    },
   },
 } as const
