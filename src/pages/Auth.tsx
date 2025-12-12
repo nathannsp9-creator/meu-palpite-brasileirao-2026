@@ -3,32 +3,62 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Trophy, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { z } from "zod";
 
-const signUpSchema = z.object({
-  nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
-  nickname: z.string().min(3, "Apelido deve ter pelo menos 3 caracteres").max(20, "Apelido deve ter no máximo 20 caracteres").regex(/^[a-zA-Z0-9_]+$/, "Apelido só pode conter letras, números e _"),
-  email: z.string().email("Email inválido"),
-  senha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres").regex(/[a-zA-Z]/, "Senha deve conter pelo menos uma letra").regex(/[0-9]/, "Senha deve conter pelo menos um número"),
-  confirmarSenha: z.string()
-}).refine((data) => data.senha === data.confirmarSenha, {
-  message: "As senhas não coincidem",
-  path: ["confirmarSenha"],
-});
+/* =======================
+   Schemas
+======================= */
+
+const signUpSchema = z
+  .object({
+    nome: z
+      .string()
+      .min(2, "Nome deve ter pelo menos 2 caracteres")
+      .max(100),
+    nickname: z
+      .string()
+      .min(3, "Apelido deve ter pelo menos 3 caracteres")
+      .max(20, "Apelido deve ter no máximo 20 caracteres")
+      .regex(/^[a-zA-Z0-9_]+$/, "Apelido só pode conter letras, números e _"),
+    email: z.string().email("Email inválido"),
+    senha: z
+      .string()
+      .min(8, "Senha deve ter pelo menos 8 caracteres")
+      .regex(/[a-zA-Z]/, "Senha deve conter pelo menos uma letra")
+      .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
+    confirmarSenha: z.string(),
+  })
+  .refine((data) => data.senha === data.confirmarSenha, {
+    message: "As senhas não coincidem",
+    path: ["confirmarSenha"],
+  });
 
 const signInSchema = z.object({
   email: z.string().email("Email inválido"),
   senha: z.string().min(1, "Senha é obrigatória"),
 });
 
+/* =======================
+   Component
+======================= */
+
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     nome: "",
@@ -37,7 +67,7 @@ export default function Auth() {
     senha: "",
     confirmarSenha: "",
   });
-  
+
   const navigate = useNavigate();
   const location = useLocation();
   const { signIn, signUp, user, loading } = useAuth();
@@ -50,11 +80,18 @@ export default function Auth() {
     }
   }, [user, loading, navigate, from]);
 
+  /* =======================
+     Validation
+  ======================= */
+
   const validateForm = () => {
     setErrors({});
     try {
       if (isLogin) {
-        signInSchema.parse({ email: formData.email, senha: formData.senha });
+        signInSchema.parse({
+          email: formData.email,
+          senha: formData.senha,
+        });
       } else {
         signUpSchema.parse(formData);
       }
@@ -73,54 +110,47 @@ export default function Auth() {
     }
   };
 
+  /* =======================
+     Submit
+  ======================= */
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
 
     try {
       if (isLogin) {
         const { error } = await signIn(formData.email, formData.senha);
         if (error) {
-          if (error.message.includes("Invalid login credentials")) {
-            toast.error("Email ou senha incorretos");
-          } else {
-            toast.error(error.message);
-          }
+          toast.error("Email ou senha incorretos");
           return;
         }
         toast.success("Login realizado com sucesso!");
       } else {
-        const { error } = await signUp(formData.email, formData.senha, formData.nome, formData.nickname);
+        const { error } = await signUp(
+          formData.email,
+          formData.senha,
+          formData.nome,
+          formData.nickname
+        );
         if (error) {
-          if (error.message.includes("already registered")) {
-            toast.error("Este email já está cadastrado");
-          } else if (error.message.includes("duplicate key value violates unique constraint")) {
-            toast.error("Este apelido já está em uso. Escolha outro.");
-          } else {
-            toast.error(error.message);
-          }
+          toast.error(error.message);
           return;
         }
         toast.success("Cadastro realizado com sucesso!");
       }
-    } catch (error: any) {
+    } catch {
       toast.error("Ocorreu um erro. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!formData.email) {
-      toast.error("Digite seu email primeiro");
-      return;
-    }
-    
-    toast.info("Funcionalidade de recuperação de senha em breve!");
-  };
+  /* =======================
+     Loading state
+  ======================= */
 
   if (loading) {
     return (
@@ -130,6 +160,10 @@ export default function Auth() {
     );
   }
 
+  /* =======================
+     UI
+  ======================= */
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-brasil p-4">
       <Card className="w-full max-w-md shadow-hover">
@@ -137,6 +171,7 @@ export default function Auth() {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary">
             <Trophy className="h-10 w-10 text-primary-foreground" />
           </div>
+
           <div>
             <CardTitle className="text-2xl">Bolão Brasileirão</CardTitle>
             <CardDescription>
@@ -146,16 +181,16 @@ export default function Auth() {
             </CardDescription>
           </div>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <>
+                {/* Nome */}
                 <div className="space-y-2">
                   <Label htmlFor="nome">Nome Completo</Label>
                   <Input
                     id="nome"
-                    type="text"
-                    placeholder="Seu nome"
                     value={formData.nome}
                     onChange={(e) =>
                       setFormData({ ...formData, nome: e.target.value })
@@ -168,35 +203,35 @@ export default function Auth() {
                   )}
                 </div>
 
+                {/* Nickname */}
                 <div className="space-y-2">
-                  <Label htmlFor="nickname">Apelido (único)</Label>
+                  <Label htmlFor="nickname">Apelido</Label>
                   <Input
                     id="nickname"
-                    type="text"
-                    placeholder="seu_apelido"
                     value={formData.nickname}
                     onChange={(e) =>
-                      setFormData({ ...formData, nickname: e.target.value.toLowerCase() })
+                      setFormData({
+                        ...formData,
+                        nickname: e.target.value.toLowerCase(),
+                      })
                     }
                     className={errors.nickname ? "border-destructive" : ""}
                     disabled={isLoading}
                   />
                   {errors.nickname && (
-                    <p className="text-xs text-destructive">{errors.nickname}</p>
+                    <p className="text-xs text-destructive">
+                      {errors.nickname}
+                    </p>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    Este será seu nome de exibição no ranking
-                  </p>
                 </div>
               </>
             )}
-            
+
+            {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label>Email</Label>
               <Input
-                id="email"
                 type="email"
-                placeholder="seu@email.com"
                 value={formData.email}
                 onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
@@ -209,77 +244,78 @@ export default function Auth() {
               )}
             </div>
 
+            {/* Senha */}
             <div className="space-y-2">
-              <Label htmlFor="senha">Senha</Label>
+              <Label>Senha</Label>
               <div className="relative">
                 <Input
-                  id="senha"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
                   value={formData.senha}
                   onChange={(e) =>
                     setFormData({ ...formData, senha: e.target.value })
                   }
-                  className={errors.senha ? "border-destructive pr-10" : "pr-10"}
+                  className={`pr-10 ${
+                    errors.senha ? "border-destructive" : ""
+                  }`}
                   disabled={isLoading}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowPassword((v) => !v)}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                  )}
+                  {showPassword ? <EyeOff /> : <Eye />}
                 </Button>
               </div>
-              {errors.senha && (
-                <p className="text-xs text-destructive">{errors.senha}</p>
-              )}
             </div>
 
+            {/* Confirmar senha */}
             {!isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="confirmarSenha">Confirmar Senha</Label>
-                <Input
-                  id="confirmarSenha"
-                  type="password"
-                  placeholder="••••••••"
-                  value={formData.confirmarSenha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, confirmarSenha: e.target.value })
-                  }
-                  className={errors.confirmarSenha ? "border-destructive" : ""}
-                  disabled={isLoading}
-                />
+                <Label>Confirmar Senha</Label>
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmarSenha}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        confirmarSenha: e.target.value,
+                      })
+                    }
+                    className={`pr-10 ${
+                      errors.confirmarSenha ? "border-destructive" : ""
+                    }`}
+                    disabled={isLoading}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() =>
+                      setShowConfirmPassword((v) => !v)
+                    }
+                  >
+                    {showConfirmPassword ? <EyeOff /> : <Eye />}
+                  </Button>
+                </div>
                 {errors.confirmarSenha && (
-                  <p className="text-xs text-destructive">{errors.confirmarSenha}</p>
+                  <p className="text-xs text-destructive">
+                    {errors.confirmarSenha}
+                  </p>
                 )}
               </div>
             )}
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
+              {isLoading && (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
+              )}
               {isLogin ? "Entrar" : "Cadastrar"}
             </Button>
-
-            {isLogin && (
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="text-sm text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  Esqueceu a senha?
-                </button>
-              </div>
-            )}
 
             <div className="text-center">
               <button
@@ -288,7 +324,7 @@ export default function Auth() {
                   setIsLogin(!isLogin);
                   setErrors({});
                 }}
-                className="text-sm text-muted-foreground hover:text-primary transition-smooth"
+                className="text-sm text-muted-foreground hover:text-primary"
               >
                 {isLogin
                   ? "Não tem conta? Cadastre-se"
