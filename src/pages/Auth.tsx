@@ -21,31 +21,28 @@ import { z } from "zod";
 
 const signUpSchema = z
   .object({
-    nome: z
-      .string()
-      .min(2, "Nome deve ter pelo menos 2 caracteres")
-      .max(100),
+    nome: z.string().min(2).max(100),
     nickname: z
       .string()
-      .min(3, "Apelido deve ter pelo menos 3 caracteres")
-      .max(20, "Apelido deve ter no máximo 20 caracteres")
-      .regex(/^[a-zA-Z0-9_]+$/, "Apelido só pode conter letras, números e _"),
-    email: z.string().email("Email inválido"),
+      .min(3)
+      .max(20)
+      .regex(/^[a-zA-Z0-9_]+$/),
+    email: z.string().email(),
     senha: z
       .string()
-      .min(8, "Senha deve ter pelo menos 8 caracteres")
-      .regex(/[a-zA-Z]/, "Senha deve conter pelo menos uma letra")
-      .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
+      .min(8)
+      .regex(/[a-zA-Z]/)
+      .regex(/[0-9]/),
     confirmarSenha: z.string(),
   })
   .refine((data) => data.senha === data.confirmarSenha, {
-    message: "As senhas não coincidem",
     path: ["confirmarSenha"],
+    message: "As senhas não coincidem",
   });
 
 const signInSchema = z.object({
-  email: z.string().email("Email inválido"),
-  senha: z.string().min(1, "Senha é obrigatória"),
+  email: z.string().email(),
+  senha: z.string().min(1),
 });
 
 /* =======================
@@ -55,10 +52,8 @@ const signInSchema = z.object({
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     nome: "",
@@ -80,29 +75,18 @@ export default function Auth() {
     }
   }, [user, loading, navigate, from]);
 
-  /* =======================
-     Validation
-  ======================= */
-
   const validateForm = () => {
     setErrors({});
     try {
-      if (isLogin) {
-        signInSchema.parse({
-          email: formData.email,
-          senha: formData.senha,
-        });
-      } else {
-        signUpSchema.parse(formData);
-      }
+      isLogin
+        ? signInSchema.parse(formData)
+        : signUpSchema.parse(formData);
       return true;
     } catch (error) {
       if (error instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
         error.errors.forEach((err) => {
-          if (err.path[0]) {
-            newErrors[err.path[0] as string] = err.message;
-          }
+          if (err.path[0]) newErrors[err.path[0]] = err.message;
         });
         setErrors(newErrors);
       }
@@ -110,23 +94,15 @@ export default function Auth() {
     }
   };
 
-  /* =======================
-     Submit
-  ======================= */
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsLoading(true);
-
     try {
       if (isLogin) {
         const { error } = await signIn(formData.email, formData.senha);
-        if (error) {
-          toast.error("Email ou senha incorretos");
-          return;
-        }
+        if (error) return toast.error("Email ou senha incorretos");
         toast.success("Login realizado com sucesso!");
       } else {
         const { error } = await signUp(
@@ -135,22 +111,13 @@ export default function Auth() {
           formData.nome,
           formData.nickname
         );
-        if (error) {
-          toast.error(error.message);
-          return;
-        }
+        if (error) return toast.error(error.message);
         toast.success("Cadastro realizado com sucesso!");
       }
-    } catch {
-      toast.error("Ocorreu um erro. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   };
-
-  /* =======================
-     Loading state
-  ======================= */
 
   if (loading) {
     return (
@@ -160,18 +127,13 @@ export default function Auth() {
     );
   }
 
-  /* =======================
-     UI
-  ======================= */
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-brasil p-4">
-      <Card className="w-full max-w-md shadow-hover">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary">
             <Trophy className="h-10 w-10 text-primary-foreground" />
           </div>
-
           <div>
             <CardTitle className="text-2xl">Bolão Brasileirão</CardTitle>
             <CardDescription>
@@ -186,28 +148,19 @@ export default function Auth() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <>
-                {/* Nome */}
                 <div className="space-y-2">
-                  <Label htmlFor="nome">Nome Completo</Label>
+                  <Label>Nome Completo</Label>
                   <Input
-                    id="nome"
                     value={formData.nome}
                     onChange={(e) =>
                       setFormData({ ...formData, nome: e.target.value })
                     }
-                    className={errors.nome ? "border-destructive" : ""}
-                    disabled={isLoading}
                   />
-                  {errors.nome && (
-                    <p className="text-xs text-destructive">{errors.nome}</p>
-                  )}
                 </div>
 
-                {/* Nickname */}
                 <div className="space-y-2">
-                  <Label htmlFor="nickname">Apelido</Label>
+                  <Label>Apelido</Label>
                   <Input
-                    id="nickname"
                     value={formData.nickname}
                     onChange={(e) =>
                       setFormData({
@@ -215,19 +168,11 @@ export default function Auth() {
                         nickname: e.target.value.toLowerCase(),
                       })
                     }
-                    className={errors.nickname ? "border-destructive" : ""}
-                    disabled={isLoading}
                   />
-                  {errors.nickname && (
-                    <p className="text-xs text-destructive">
-                      {errors.nickname}
-                    </p>
-                  )}
                 </div>
               </>
             )}
 
-            {/* Email */}
             <div className="space-y-2">
               <Label>Email</Label>
               <Input
@@ -236,15 +181,9 @@ export default function Auth() {
                 onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
                 }
-                className={errors.email ? "border-destructive" : ""}
-                disabled={isLoading}
               />
-              {errors.email && (
-                <p className="text-xs text-destructive">{errors.email}</p>
-              )}
             </div>
 
-            {/* Senha */}
             <div className="space-y-2">
               <Label>Senha</Label>
               <div className="relative">
@@ -254,10 +193,7 @@ export default function Auth() {
                   onChange={(e) =>
                     setFormData({ ...formData, senha: e.target.value })
                   }
-                  className={`pr-10 ${
-                    errors.senha ? "border-destructive" : ""
-                  }`}
-                  disabled={isLoading}
+                  className="pr-10"
                 />
                 <Button
                   type="button"
@@ -269,9 +205,20 @@ export default function Auth() {
                   {showPassword ? <EyeOff /> : <Eye />}
                 </Button>
               </div>
+
+              {isLogin && (
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-xs text-muted-foreground hover:text-primary"
+                  >
+                    Esqueceu a senha?
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Confirmar senha */}
             {!isLogin && (
               <div className="space-y-2">
                 <Label>Confirmar Senha</Label>
@@ -285,10 +232,7 @@ export default function Auth() {
                         confirmarSenha: e.target.value,
                       })
                     }
-                    className={`pr-10 ${
-                      errors.confirmarSenha ? "border-destructive" : ""
-                    }`}
-                    disabled={isLoading}
+                    className="pr-10"
                   />
                   <Button
                     type="button"
@@ -302,15 +246,10 @@ export default function Auth() {
                     {showConfirmPassword ? <EyeOff /> : <Eye />}
                   </Button>
                 </div>
-                {errors.confirmarSenha && (
-                  <p className="text-xs text-destructive">
-                    {errors.confirmarSenha}
-                  </p>
-                )}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full">
               {isLoading && (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               )}
