@@ -21,18 +21,18 @@ import { z } from "zod";
 
 const signUpSchema = z
   .object({
-    nome: z.string().min(2).max(100),
+    nome: z.string().min(2, "Informe seu nome").max(100),
     nickname: z
       .string()
-      .min(3)
-      .max(20)
-      .regex(/^[a-zA-Z0-9_]+$/),
-    email: z.string().email(),
+      .min(3, "Apelido muito curto")
+      .max(20, "Apelido muito longo")
+      .regex(/^[a-zA-Z0-9_]+$/, "Use apenas letras, números e _"),
+    email: z.string().email("Email inválido"),
     senha: z
       .string()
-      .min(8)
-      .regex(/[a-zA-Z]/)
-      .regex(/[0-9]/),
+      .min(8, "Mínimo 8 caracteres")
+      .regex(/[a-zA-Z]/, "Deve conter letra")
+      .regex(/[0-9]/, "Deve conter número"),
     confirmarSenha: z.string(),
   })
   .refine((data) => data.senha === data.confirmarSenha, {
@@ -41,8 +41,8 @@ const signUpSchema = z
   });
 
 const signInSchema = z.object({
-  email: z.string().email(),
-  senha: z.string().min(1),
+  email: z.string().email("Email inválido"),
+  senha: z.string().min(1, "Informe a senha"),
 });
 
 /* =======================
@@ -54,6 +54,7 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     nome: "",
@@ -155,7 +156,12 @@ export default function Auth() {
                     onChange={(e) =>
                       setFormData({ ...formData, nome: e.target.value })
                     }
+                    aria-invalid={!!errors.nome}
+                    className={errors.nome ? "border-destructive" : ""}
                   />
+                  {errors.nome && (
+                    <p className="text-xs text-destructive">{errors.nome}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -168,7 +174,14 @@ export default function Auth() {
                         nickname: e.target.value.toLowerCase(),
                       })
                     }
+                    aria-invalid={!!errors.nickname}
+                    className={errors.nickname ? "border-destructive" : ""}
                   />
+                  {errors.nickname && (
+                    <p className="text-xs text-destructive">
+                      {errors.nickname}
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -181,7 +194,12 @@ export default function Auth() {
                 onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
                 }
+                aria-invalid={!!errors.email}
+                className={errors.email ? "border-destructive" : ""}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -193,7 +211,10 @@ export default function Auth() {
                   onChange={(e) =>
                     setFormData({ ...formData, senha: e.target.value })
                   }
-                  className="pr-10"
+                  aria-invalid={!!errors.senha}
+                  className={`pr-10 ${
+                    errors.senha ? "border-destructive" : ""
+                  }`}
                 />
                 <Button
                   type="button"
@@ -205,6 +226,10 @@ export default function Auth() {
                   {showPassword ? <EyeOff /> : <Eye />}
                 </Button>
               </div>
+
+              {errors.senha && (
+                <p className="text-xs text-destructive">{errors.senha}</p>
+              )}
 
               {isLogin && (
                 <div className="text-right">
@@ -232,7 +257,10 @@ export default function Auth() {
                         confirmarSenha: e.target.value,
                       })
                     }
-                    className="pr-10"
+                    aria-invalid={!!errors.confirmarSenha}
+                    className={`pr-10 ${
+                      errors.confirmarSenha ? "border-destructive" : ""
+                    }`}
                   />
                   <Button
                     type="button"
@@ -246,10 +274,15 @@ export default function Auth() {
                     {showConfirmPassword ? <EyeOff /> : <Eye />}
                   </Button>
                 </div>
+                {errors.confirmarSenha && (
+                  <p className="text-xs text-destructive">
+                    {errors.confirmarSenha}
+                  </p>
+                )}
               </div>
             )}
 
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               )}
