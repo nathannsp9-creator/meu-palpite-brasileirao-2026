@@ -83,18 +83,19 @@ export const Layout = ({ children }: LayoutProps) => {
                 <Button variant="ghost" className="gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                      {profile ? getInitials(profile.nome) : "U"}
+                      {profile?.nome?.charAt(0).toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden sm:inline-block">{profile?.nickname || "Usuário"}</span>
+                  <span className="hidden sm:inline-block">
+                    {profile?.nome?.split(" ")[0] || "Usuário"}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
-                  <div className="flex flex-col">
-                    <span>{profile?.nome}</span>
-                    <span className="text-xs text-muted-foreground">@{profile?.nickname}</span>
-                  </div>
+                  <span className="font-medium">
+                    {profile?.nome}
+                  </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>

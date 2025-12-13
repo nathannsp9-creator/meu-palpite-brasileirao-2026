@@ -36,7 +36,8 @@ export default function Dashboard() {
     const date = new Date(dateStr);
     return format(date, "dd/MM HH:mm", { locale: ptBR });
   };
-
+  
+  const firstName = profile?.nome?.split(" ")[0];
   return (
     <Layout>
       <div className="space-y-8">
@@ -44,7 +45,7 @@ export default function Dashboard() {
         <div className="rounded-lg bg-gradient-brasil p-8 text-center shadow-card">
           <Trophy className="mx-auto mb-4 h-12 w-12 text-primary-foreground" />
           <h1 className="mb-2 text-3xl font-bold text-primary-foreground">
-            Bem-vindo, {profile?.nome?.split(" ")[0]}!
+            Bem-vindo{firstName ? `, ${firstName}` : ""}!
           </h1>
           <p className="text-primary-foreground/90">
             Faça seus palpites e dispute o topo do ranking com seus amigos
