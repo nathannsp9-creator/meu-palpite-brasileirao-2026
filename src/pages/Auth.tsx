@@ -127,6 +127,7 @@ export default function Auth() {
       }
 
       toast.success("Cadastro realizado com sucesso!");
+      navigate("/login");
 
       setTimeout(() => {
         setIsLogin(true);

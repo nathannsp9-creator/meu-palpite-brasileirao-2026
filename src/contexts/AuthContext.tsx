@@ -47,19 +47,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loadProfile = async (userId: string) => {
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (data) {
+    setProfile(data as Profile);
+  }
+};
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-
         if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+          setUser(session.user);
         } else {
           setProfile(null);
-          setRole('user');
+          setRole("user");
         }
         setLoading(false);
       }
@@ -83,17 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       nome: string,
       nickname: string
     ) => {
-      const redirectUrl = `${window.location.origin}/`;
-
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            nome,
-            nickname
-          }
+          data: { nome, nickname }
         }
       });
 
@@ -101,28 +104,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
-      // ✅ CRIA O PERFIL NA TABELA PROFILES
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          nome,
-          nickname,
-          email
-        });
+      // cria profile
+      await supabase.from("profiles").insert({
+        id: data.user.id,
+        nome,
+        nickname,
+        email
+      });
 
-      return { error: profileError };
+      // 🔥 GARANTE QUE NÃO EXISTE SESSÃO
+      await supabase.auth.signOut();
+
+      return { error: null };
     };
 
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
 
+  const signIn = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error || !data.user) {
     return { error };
-  };
+  }
+
+  // 🔥 CARREGA PROFILE DE FORMA GARANTIDA
+  await loadProfile(data.user.id);
+
+  return { error: null };
+};
+
 
   const signOut = async () => {
     await supabase.auth.signOut();
