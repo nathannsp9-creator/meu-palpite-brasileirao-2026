@@ -96,29 +96,51 @@ export default function Auth() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+  e.preventDefault();
+  if (!validateForm()) return;
 
-    setIsLoading(true);
-    try {
-      if (isLogin) {
-        const { error } = await signIn(formData.email, formData.senha);
-        if (error) return toast.error("Email ou senha incorretos");
-        toast.success("Login realizado com sucesso!");
-      } else {
-        const { error } = await signUp(
-          formData.email,
-          formData.senha,
-          formData.nome,
-          formData.nickname
-        );
-        if (error) return toast.error(error.message);
-        toast.success("Cadastro realizado com sucesso!");
+  setIsLoading(true);
+  try {
+    if (isLogin) {
+      const { error } = await signIn(
+        formData.email.trim().toLowerCase(),
+        formData.senha
+      );
+
+      if (error) {
+        toast.error("Email ou senha incorretos");
+        return;
       }
-    } finally {
-      setIsLoading(false);
+
+      toast.success("Login realizado com sucesso!");
+    } else {
+      const { error } = await signUp(
+        formData.email,
+        formData.senha,
+        formData.nome,
+        formData.nickname
+      );
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      toast.success("Cadastro realizado com sucesso!");
+
+      setTimeout(() => {
+        setIsLogin(true);
+        setFormData({
+          ...formData,
+          senha: "",
+          confirmarSenha: "",
+        });
+      }, 2000);
     }
-  };
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   if (loading) {
     return (
@@ -295,8 +317,12 @@ export default function Auth() {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setErrors({});
+                  setFormData((prev) => ({
+                    ...prev,
+                    senha: "",
+                    confirmarSenha: "",
+                  }));
                 }}
-                className="text-sm text-muted-foreground hover:text-primary"
               >
                 {isLogin
                   ? "Não tem conta? Cadastre-se"

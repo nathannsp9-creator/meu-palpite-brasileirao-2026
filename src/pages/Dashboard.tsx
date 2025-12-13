@@ -18,6 +18,11 @@ export default function Dashboard() {
   const { data: topRanking, isLoading: loadingRanking } = useTopRanking(5);
   const { data: meusPalpites } = useMeusPalpites(rodadaAtual?.id);
 
+  const hasRodada = !!rodadaAtual;
+  const hasJogos = !!proximosJogos && proximosJogos.length > 0;
+  const hasRanking = !!topRanking && topRanking.length > 1;
+
+
   const palpitesFeitos = meusPalpites?.length || 0;
   const totalJogos = proximosJogos?.length || 0;
 
@@ -54,20 +59,18 @@ export default function Dashboard() {
               <Trophy className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              {loadingRanking ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : userRankingData ? (
+              {!hasRanking ? (
                 <>
-                  <div className="text-2xl font-bold">{(userPosition || 0) + 1}º Lugar</div>
+                  <div className="text-2xl font-bold">-</div>
                   <p className="text-xs text-muted-foreground">
-                    {userRankingData.total_pontos} pontos acumulados
+                    Ranking ainda não disponível
                   </p>
                 </>
               ) : (
                 <>
-                  <div className="text-2xl font-bold">-</div>
+                  <div className="text-2xl font-bold">{userPosition! + 1}º Lugar</div>
                   <p className="text-xs text-muted-foreground">
-                    Faça seus palpites para entrar no ranking
+                    {userRankingData?.total_pontos} pontos acumulados
                   </p>
                 </>
               )}
@@ -93,7 +96,7 @@ export default function Dashboard() {
                 <>
                   <div className="text-2xl font-bold">-</div>
                   <p className="text-xs text-muted-foreground">
-                    Nenhuma rodada disponível
+                    Rodadas ainda não liberadas
                   </p>
                 </>
               )}
@@ -106,10 +109,23 @@ export default function Dashboard() {
               <Target className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{palpitesFeitos} / {totalJogos || "?"}</div>
-              <p className="text-xs text-muted-foreground">
-                palpites feitos nesta rodada
-              </p>
+              {!hasRodada ? (
+                <>
+                  <div className="text-2xl font-bold">-</div>
+                  <p className="text-xs text-muted-foreground">
+                    Palpites ainda não liberados
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">
+                    {palpitesFeitos} / {totalJogos}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    palpites feitos nesta rodada
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -141,11 +157,18 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              <Link to="/palpites">
-                <Button className="w-full" size="lg">
-                  {palpitesFeitos > 0 ? "Continuar Palpites" : "Fazer Palpites"}
-                </Button>
-              </Link>
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={!hasRodada || !hasJogos}
+              >
+                Fazer Palpites
+              </Button>
+              {(!hasRodada || !hasJogos) && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Logo mais você terá os jogos da rodada para palpitar
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -189,11 +212,13 @@ export default function Dashboard() {
                   Nenhum participante ainda
                 </p>
               )}
-              <Link to="/ranking">
-                <Button variant="outline" className="w-full mt-4">
-                  Ver Ranking Completo
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full mt-4"
+                disabled={!hasRanking}
+              >
+                Ver Ranking Completo
+              </Button>
             </CardContent>
           </Card>
 
