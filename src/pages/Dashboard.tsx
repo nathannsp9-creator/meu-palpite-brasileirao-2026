@@ -210,7 +210,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <p className="text-center text-muted-foreground py-4">
-                  Nenhum participante ainda
+                  Nenhum adversário ainda para rankear
                 </p>
               )}
               <Button

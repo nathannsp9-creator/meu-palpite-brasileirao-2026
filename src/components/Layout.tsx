@@ -94,7 +94,7 @@ export const Layout = ({ children }: LayoutProps) => {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
                   <span className="font-medium">
-                    {profile?.nome}
+                    {profile?.nome?.split(" ")[0] || profile?.nome}
                   </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />

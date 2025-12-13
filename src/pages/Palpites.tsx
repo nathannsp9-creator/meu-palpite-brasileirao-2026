@@ -4,8 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Save, AlertCircle } from "lucide-react";
+import { Clock, Save, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogos";
+import { useMeusPalpites } from "@/hooks/usePalpites";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Resultado = "casa" | "empate" | "visitante" | null;
 
@@ -17,26 +20,15 @@ interface Palpite {
 }
 
 export default function Palpites() {
+  const { profile } = useAuth();
   const [palpites, setPalpites] = useState<Record<number, Palpite>>({});
 
-  // Mock data
-  const rodada = {
-    numero: 15,
-    dataFechamento: "20/05/2024 19:00",
-  };
+  const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
+  const { data: proximosJogos, isLoading: loadingJogos } = useProximosJogos();
+  const { data: meusPalpites } = useMeusPalpites(rodadaAtual?.id);
 
-  const jogos = [
-    { id: 1, casa: "Flamengo", visitante: "Palmeiras", data: "20/05 16:00", escudo_casa: "🔴⚫", escudo_visitante: "🟢⚪" },
-    { id: 2, casa: "São Paulo", visitante: "Corinthians", data: "20/05 18:30", escudo_casa: "🔴⚫⚪", escudo_visitante: "⚫⚪" },
-    { id: 3, casa: "Grêmio", visitante: "Internacional", data: "20/05 20:00", escudo_casa: "🔵⚫⚪", escudo_visitante: "🔴⚪" },
-    { id: 4, casa: "Atlético-MG", visitante: "Cruzeiro", data: "21/05 16:00", escudo_casa: "⚫⚪", escudo_visitante: "🔵⚪" },
-    { id: 5, casa: "Botafogo", visitante: "Fluminense", data: "21/05 18:30", escudo_casa: "⚫⚪", escudo_visitante: "🟢🔴⚪" },
-    { id: 6, casa: "Santos", visitante: "Vasco", data: "21/05 20:00", escudo_casa: "⚪⚫", escudo_visitante: "⚫⚪" },
-    { id: 7, casa: "Bahia", visitante: "Vitória", data: "22/05 16:00", escudo_casa: "🔵⚪🔴", escudo_visitante: "🔴⚫" },
-    { id: 8, casa: "Fortaleza", visitante: "Ceará", data: "22/05 18:30", escudo_casa: "🔴🔵⚪", escudo_visitante: "⚫⚪" },
-    { id: 9, casa: "Athletico-PR", visitante: "Coritiba", data: "22/05 20:00", escudo_casa: "🔴⚫", escudo_visitante: "🟢⚪" },
-    { id: 10, casa: "Bragantino", visitante: "Goiás", data: "23/05 16:00", escudo_casa: "⚪🔴⚫", escudo_visitante: "🟢⚪" },
-  ];
+  const jogos = proximosJogos || [];
+  const rodada = rodadaAtual || null;
 
   const handleResultadoChange = (jogoId: number, resultado: Resultado) => {
     setPalpites((prev) => ({
@@ -85,6 +77,8 @@ export default function Palpites() {
     ).length;
   };
 
+  const jogosDisponiveis = jogos && jogos.length > 0;
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -96,7 +90,7 @@ export default function Palpites() {
           </div>
           <Badge variant="outline" className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            Fecha em: {rodada.dataFechamento}
+            {rodada ? `Fecha em: ${new Date(rodada.data_fechamento || rodada.dataFechamento || "").toLocaleString()}` : "Aguardando rodada"}
           </Badge>
         </div>
 
@@ -106,12 +100,12 @@ export default function Palpites() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm text-primary-foreground">
                 <span className="font-medium">Progresso dos Palpites</span>
-                <span className="font-bold">{getPalpitosCompletos()} / {jogos.length}</span>
+                <span className="font-bold">{getPalpitosCompletos()} / {jogos.length || 0}</span>
               </div>
               <div className="h-3 rounded-full bg-primary-foreground/20 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary-foreground transition-smooth"
-                  style={{ width: `${(getPalpitosCompletos() / jogos.length) * 100}%` }}
+                  style={{ width: jogos.length ? `${(getPalpitosCompletos() / jogos.length) * 100}%` : "0%" }}
                 />
               </div>
             </div>
@@ -119,22 +113,38 @@ export default function Palpites() {
         </Card>
 
         {/* Alert Info */}
-        {getPalpitosCompletos() < jogos.length && (
+        {(!jogosDisponiveis) ? (
           <Card className="border-secondary bg-secondary/10">
             <CardContent className="flex items-start gap-3 pt-6">
               <AlertCircle className="h-5 w-5 text-secondary-foreground mt-0.5 flex-shrink-0" />
               <p className="text-sm text-secondary-foreground">
-                Para cada jogo, selecione o resultado (vitória do mandante, empate ou vitória do visitante)
-                e informe o placar que você acredita.
+                Logo mais você terá os jogos da rodada para palpitar
               </p>
             </CardContent>
           </Card>
+        ) : (
+          getPalpitosCompletos() < jogos.length && (
+            <Card className="border-secondary bg-secondary/10">
+              <CardContent className="flex items-start gap-3 pt-6">
+                <AlertCircle className="h-5 w-5 text-secondary-foreground mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-secondary-foreground">
+                  Para cada jogo, selecione o resultado (vitória do mandante, empate ou vitória do visitante)
+                  e informe o placar que você acredita.
+                </p>
+              </CardContent>
+            </Card>
+          )
         )}
 
         {/* Lista de Jogos */}
         <div className="space-y-4">
-          {jogos.map((jogo) => {
-            const palpite = palpites[jogo.id];
+          {loadingJogos || loadingRodada ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : jogosDisponiveis ? (
+            jogos.map((jogo: any) => {
+              const palpite = palpites[jogo.id];
             const isCompleto = palpite?.resultado && palpite?.placarCasa && palpite?.placarVisitante;
 
             return (
@@ -151,14 +161,14 @@ export default function Palpites() {
                   {/* Times */}
                   <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
                     <div className="text-right">
-                      <div className="text-2xl mb-1">{jogo.escudo_casa}</div>
-                      <div className="font-semibold">{jogo.casa}</div>
+                      <div className="text-2xl mb-1">{jogo.escudo_casa || jogo.logo_casa || ""}</div>
+                      <div className="font-semibold">{jogo.time_casa || jogo.casa}</div>
                       <div className="text-xs text-muted-foreground">Mandante</div>
                     </div>
                     <div className="text-2xl font-bold text-muted-foreground">VS</div>
                     <div className="text-left">
-                      <div className="text-2xl mb-1">{jogo.escudo_visitante}</div>
-                      <div className="font-semibold">{jogo.visitante}</div>
+                      <div className="text-2xl mb-1">{jogo.escudo_visitante || jogo.logo_visitante || ""}</div>
+                      <div className="font-semibold">{jogo.time_visitante || jogo.visitante}</div>
                       <div className="text-xs text-muted-foreground">Visitante</div>
                     </div>
                   </div>
@@ -171,8 +181,9 @@ export default function Palpites() {
                         variant={palpite?.resultado === "casa" ? "default" : "outline"}
                         onClick={() => handleResultadoChange(jogo.id, "casa")}
                         className="w-full"
+                        disabled={!jogosDisponiveis}
                       >
-                        Vitória {jogo.casa.split(" ")[0]}
+                        Vitória { (jogo.time_casa || jogo.casa || "").split(" ")[0] }
                       </Button>
                       <Button
                         variant={palpite?.resultado === "empate" ? "default" : "outline"}
@@ -185,8 +196,9 @@ export default function Palpites() {
                         variant={palpite?.resultado === "visitante" ? "default" : "outline"}
                         onClick={() => handleResultadoChange(jogo.id, "visitante")}
                         className="w-full"
+                        disabled={!jogosDisponiveis}
                       >
-                        Vitória {jogo.visitante.split(" ")[0]}
+                        Vitória { (jogo.time_visitante || jogo.visitante || "").split(" ")[0] }
                       </Button>
                     </div>
                   </div>
@@ -196,7 +208,7 @@ export default function Palpites() {
                     <label className="text-sm font-medium">Placar:</label>
                     <div className="flex items-center justify-center gap-3">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-sm font-medium">{jogo.casa.split(" ")[0]}</span>
+                        <span className="text-sm font-medium">{(jogo.time_casa || jogo.casa || "").split(" ")[0]}</span>
                         <Input
                           type="text"
                           inputMode="numeric"
@@ -206,11 +218,12 @@ export default function Palpites() {
                           className="w-16 text-center text-lg font-bold"
                           value={palpite?.placarCasa || ""}
                           onChange={(e) => handlePlacarChange(jogo.id, "placarCasa", e.target.value)}
+                          disabled={!jogosDisponiveis}
                         />
                       </div>
                       <span className="text-2xl font-bold text-muted-foreground mt-6">X</span>
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-sm font-medium">{jogo.visitante.split(" ")[0]}</span>
+                        <span className="text-sm font-medium">{(jogo.time_visitante || jogo.visitante || "").split(" ")[0]}</span>
                         <Input
                           type="text"
                           inputMode="numeric"
@@ -220,6 +233,7 @@ export default function Palpites() {
                           className="w-16 text-center text-lg font-bold"
                           value={palpite?.placarVisitante || ""}
                           onChange={(e) => handlePlacarChange(jogo.id, "placarVisitante", e.target.value)}
+                          disabled={!jogosDisponiveis}
                         />
                       </div>
                     </div>
@@ -227,7 +241,10 @@ export default function Palpites() {
                 </CardContent>
               </Card>
             );
-          })}
+            })
+          ) : (
+            <p className="text-center text-muted-foreground py-8">Nenhum jogo disponível no momento</p>
+          )}
         </div>
 
         {/* Botão Salvar */}
@@ -237,10 +254,10 @@ export default function Palpites() {
               onClick={handleSalvar}
               size="lg"
               className="w-full"
-              disabled={getPalpitosCompletos() === 0}
+              disabled={!jogosDisponiveis || getPalpitosCompletos() === 0}
             >
               <Save className="mr-2 h-5 w-5" />
-              Salvar Todos os Palpites ({getPalpitosCompletos()}/{jogos.length})
+              Salvar Todos os Palpites ({getPalpitosCompletos()}/{jogos.length || 0})
             </Button>
           </CardContent>
         </Card>
