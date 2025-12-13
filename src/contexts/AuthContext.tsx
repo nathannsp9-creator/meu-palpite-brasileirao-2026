@@ -77,23 +77,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, nome: string, nickname: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    const signUp = async (
+      email: string,
+      password: string,
+      nome: string,
+      nickname: string
+    ) => {
+      const redirectUrl = `${window.location.origin}/`;
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          nome,
-          nickname
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            nome,
+            nickname
+          }
         }
-      }
-    });
+      });
 
-    return { error };
-  };
+      if (error || !data.user) {
+        return { error };
+      }
+
+      // ✅ CRIA O PERFIL NA TABELA PROFILES
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: data.user.id,
+          nome,
+          nickname,
+          email
+        });
+
+      return { error: profileError };
+    };
+
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
