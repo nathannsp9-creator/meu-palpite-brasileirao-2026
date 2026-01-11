@@ -12,7 +12,8 @@ import {
   setDoc, 
   getDoc, 
   updateDoc,
-  serverTimestamp 
+  serverTimestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { Profile, AppRole } from '@/types/firebase';
@@ -61,9 +62,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (roleSnap.exists()) {
         setRole(roleSnap.data().role as AppRole);
+      } else {
+        setRole('user');
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      // Se não houver permissão (rules), não bloqueie o app: assume user básico
+      const code = (error as any)?.code;
+      if (code === 'permission-denied') {
+        console.warn('Sem permissão para ler perfil/user_roles; assumindo role user');
+        setRole('user');
+      } else {
+        console.error('Error fetching profile:', error);
+      }
     }
   };
 
@@ -83,6 +93,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, []);
+
+  // Listen for role changes in real time (e.g., when an admin flag is added later)
+  useEffect(() => {
+    if (!user) return;
+
+    const roleRef = doc(db, 'user_roles', user.uid);
+    const unsubscribe = onSnapshot(
+      roleRef,
+      (snap) => {
+        if (snap.exists()) {
+          setRole((snap.data().role as AppRole) || 'user');
+        } else {
+          setRole('user');
+        }
+      },
+      (error) => {
+        const code = (error as any)?.code;
+        if (code === 'permission-denied') {
+          console.warn('Sem permissão para ler user_roles; assumindo role user');
+          setRole('user');
+        } else {
+          console.error('Erro no listener de role:', error);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
 
   const signUp = async (
     email: string,

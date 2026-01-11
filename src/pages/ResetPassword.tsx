@@ -1,25 +1,37 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { auth } from "@/lib/firebase";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const oobCode = searchParams.get("oobCode") || undefined;
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
+    const validateCode = async () => {
+      if (!oobCode) {
         toast.error("Link inválido ou expirado");
-        navigate("/forgot-password");
+        navigate("/forgot-password", { replace: true });
+        return;
       }
-    });
-  }, [navigate]);
+      try {
+        await verifyPasswordResetCode(auth, oobCode);
+      } catch (error: any) {
+        toast.error("Link inválido ou expirado");
+        navigate("/forgot-password", { replace: true });
+      }
+    };
+
+    validateCode();
+  }, [navigate, oobCode]);
 
   const handleUpdate = async () => {
     if (password !== confirm) {
@@ -27,22 +39,22 @@ export default function ResetPassword() {
       return;
     }
 
-    setLoading(true);
-
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      toast.error(error.message);
+    if (!oobCode) {
+      toast.error("Link inválido ou expirado");
       return;
     }
 
-    toast.success("Senha atualizada com sucesso");
-    await supabase.auth.signOut();
-    navigate("/auth");
+    setLoading(true);
+
+    try {
+      await confirmPasswordReset(auth, oobCode, password);
+      toast.success("Senha atualizada com sucesso");
+      navigate("/auth", { replace: true });
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível atualizar a senha");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

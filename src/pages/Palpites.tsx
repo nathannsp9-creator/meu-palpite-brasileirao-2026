@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogosFirebase";
 import { useMeusPalpites } from "@/hooks/usePalpitesFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
+import { URL_ESCUDOS } from "@/constants/urls";
 
 type Resultado = "casa" | "empate" | "visitante" | null;
 
@@ -161,13 +162,31 @@ export default function Palpites() {
                   {/* Times */}
                   <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
                     <div className="text-right">
-                      <div className="text-2xl mb-1">{jogo.escudo_casa || jogo.logo_casa || ""}</div>
+                      {jogo.logo_casa ? (
+                        <img
+                          src={`${URL_ESCUDOS}${jogo.logo_casa}`}
+                          alt={`Escudo ${jogo.time_casa || jogo.casa || "mandante"}`}
+                          className="mx-auto mb-1 h-10 w-10 object-contain"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="text-2xl mb-1">{jogo.escudo_casa || ""}</div>
+                      )}
                       <div className="font-semibold">{jogo.time_casa || jogo.casa}</div>
                       <div className="text-xs text-muted-foreground">Mandante</div>
                     </div>
                     <div className="text-2xl font-bold text-muted-foreground">VS</div>
                     <div className="text-left">
-                      <div className="text-2xl mb-1">{jogo.escudo_visitante || jogo.logo_visitante || ""}</div>
+                      {jogo.logo_visitante ? (
+                        <img
+                          src={`${URL_ESCUDOS}${jogo.logo_visitante}`}
+                          alt={`Escudo ${jogo.time_visitante || jogo.visitante || "visitante"}`}
+                          className="mx-auto mb-1 h-10 w-10 object-contain"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="text-2xl mb-1">{jogo.escudo_visitante || ""}</div>
+                      )}
                       <div className="font-semibold">{jogo.time_visitante || jogo.visitante}</div>
                       <div className="text-xs text-muted-foreground">Visitante</div>
                     </div>

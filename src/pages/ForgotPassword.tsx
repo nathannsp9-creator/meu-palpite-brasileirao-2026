@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { auth } from "@/lib/firebase";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -17,18 +18,16 @@ export default function ForgotPassword() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/#/reset-password`,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await sendPasswordResetEmail(auth, email, {
+        url: `${window.location.origin}/#/reset-password`,
+      });
+      toast.success("Enviamos um link de recuperação para seu email");
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível enviar o email de recuperação");
+    } finally {
+      setLoading(false);
     }
-
-    toast.success("Enviamos um link de recuperação para seu email");
   };
 
   return (
