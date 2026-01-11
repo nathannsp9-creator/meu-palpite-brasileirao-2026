@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Save, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogos";
-import { useMeusPalpites } from "@/hooks/usePalpites";
-import { useAuth } from "@/contexts/AuthContext";
+import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogosFirebase";
+import { useMeusPalpites } from "@/hooks/usePalpitesFirebase";
+import { useAuth } from "@/contexts/AuthContextFirebase";
 
 type Resultado = "casa" | "empate" | "visitante" | null;
 

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Trophy, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContextFirebase";
 import { z } from "zod";
 
 /* =======================

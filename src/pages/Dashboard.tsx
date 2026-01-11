@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Target, Calendar, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogos";
-import { useTopRanking } from "@/hooks/useRanking";
-import { useMeusPalpites } from "@/hooks/usePalpites";
+import { useAuth } from "@/contexts/AuthContextFirebase";
+import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogosFirebase";
+import { useTopRanking } from "@/hooks/useRankingFirebase";
+import { useMeusPalpites } from "@/hooks/usePalpitesFirebase";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Jogo, Rodada } from '@/types/database';
 
+
 export function useRodadas() {
   return useQuery({
     queryKey: ['rodadas'],
