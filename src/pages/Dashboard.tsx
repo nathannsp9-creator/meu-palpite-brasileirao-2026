@@ -32,8 +32,8 @@ export default function Dashboard() {
     ? topRanking?.[userPosition] 
     : null;
 
-  const formatGameDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+  const formatGameDate = (dateValue: Date | string) => {
+    const date = new Date(dateValue);
     return format(date, "dd/MM HH:mm", { locale: ptBR });
   };
   
@@ -158,13 +158,15 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              <Button
-                className="w-full"
-                size="lg"
-                disabled={!hasRodada || !hasJogos}
-              >
-                Fazer Palpites
-              </Button>
+              {hasRodada && hasJogos ? (
+                <Button className="w-full" size="lg" asChild>
+                  <Link to="/palpites">Fazer Palpites</Link>
+                </Button>
+              ) : (
+                <Button className="w-full" size="lg" disabled>
+                  Fazer Palpites
+                </Button>
+              )}
               {(!hasRodada || !hasJogos) && (
                 <p className="text-xs text-muted-foreground text-center">
                   Logo mais você terá os jogos da rodada para palpitar
@@ -216,9 +218,10 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 className="w-full mt-4"
+                asChild
                 disabled={!hasRanking}
               >
-                Ver Ranking Completo
+                <Link to="/ranking">Ver Ranking Completo</Link>
               </Button>
             </CardContent>
           </Card>

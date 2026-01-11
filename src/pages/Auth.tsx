@@ -127,16 +127,14 @@ export default function Auth() {
       }
 
       toast.success("Cadastro realizado com sucesso!");
-      navigate("/login");
+      setIsLogin(true);
+      navigate("/auth", { replace: true });
 
-      setTimeout(() => {
-        setIsLogin(true);
-        setFormData({
-          ...formData,
-          senha: "",
-          confirmarSenha: "",
-        });
-      }, 2000);
+      setFormData({
+        ...formData,
+        senha: "",
+        confirmarSenha: "",
+      });
     }
   } finally {
     setIsLoading(false);

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   collection, 
   query, 
@@ -6,7 +6,12 @@ import {
   orderBy, 
   limit,
   getDocs,
-  Timestamp 
+  Timestamp,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Rodada, Jogo } from '@/types/firebase';
@@ -42,6 +47,32 @@ export const useRodadaAtual = () => {
       } as Rodada;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+};
+
+// Hook para listar rodadas
+export const useRodadas = () => {
+  return useQuery({
+    queryKey: ['rodadas'],
+    queryFn: async (): Promise<Rodada[]> => {
+      const rodasRef = collection(db, 'rodadas');
+      const q = query(rodasRef, orderBy('numero', 'asc'));
+      const snapshot = await getDocs(q);
+
+      return snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          numero: data.numero,
+          status: data.status,
+          data_inicio: data.data_inicio?.toDate() || null,
+          data_fechamento: data.data_fechamento?.toDate() || null,
+          created_at: data.created_at?.toDate() || null,
+          updated_at: data.updated_at?.toDate() || null,
+        } as Rodada;
+      });
+    },
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -120,5 +151,148 @@ export const useJogosPorRodada = (rodadaId?: string) => {
     },
     enabled: !!rodadaId,
     staleTime: 5 * 60 * 1000,
+  });
+};
+
+// Mutation para criar jogo
+export const useCriarJogo = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      rodada_id: string;
+      time_casa: string;
+      time_visitante: string;
+      data_jogo: Date;
+      logo_casa?: string | null;
+      logo_visitante?: string | null;
+      status?: string;
+    }) => {
+      const docRef = await addDoc(collection(db, 'jogos'), {
+        ...payload,
+        status: payload.status || 'agendado',
+        data_jogo: Timestamp.fromDate(payload.data_jogo),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+      return { id: docRef.id, data: payload };
+    },
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['proximos-jogos'] });
+      queryClient.invalidateQueries({ queryKey: ['jogos-rodada'] });
+      queryClient.invalidateQueries({ queryKey: ['jogos-rodada', variables.rodada_id] });
+    },
+  });
+};
+
+// Mutation para atualizar jogo (placar/status/datas)
+export const useAtualizarJogo = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      data?: Partial<{
+        time_casa: string;
+        time_visitante: string;
+        data_jogo: Date;
+        placar_casa: number | null;
+        placar_visitante: number | null;
+        status: string;
+        logo_casa?: string | null;
+        logo_visitante?: string | null;
+      }>;
+    }) => {
+      const { id, data } = payload;
+      const updateData: Record<string, any> = { ...data, updated_at: serverTimestamp() };
+      if (data?.data_jogo instanceof Date) {
+        updateData.data_jogo = Timestamp.fromDate(data.data_jogo);
+      }
+
+      await updateDoc(doc(db, 'jogos', id), updateData);
+      return { id };
+    },
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['proximos-jogos'] });
+      queryClient.invalidateQueries({ queryKey: ['jogos-rodada'] });
+      if (variables.data?.rodada_id) {
+        queryClient.invalidateQueries({ queryKey: ['jogos-rodada', variables.data.rodada_id] });
+      }
+    },
+  });
+};
+
+// Mutation para deletar jogo
+export const useDeletarJogo = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      await deleteDoc(doc(db, 'jogos', id));
+      return { id };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proximos-jogos'] });
+      queryClient.invalidateQueries({ queryKey: ['jogos-rodada'] });
+    },
+  });
+};
+
+// Mutation para criar rodada
+export const useCriarRodada = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      numero: number;
+      status: string;
+      data_inicio?: Date | null;
+      data_fechamento?: Date | null;
+    }) => {
+      const docRef = await addDoc(collection(db, 'rodadas'), {
+        ...payload,
+        data_inicio: payload.data_inicio ? Timestamp.fromDate(payload.data_inicio) : null,
+        data_fechamento: payload.data_fechamento ? Timestamp.fromDate(payload.data_fechamento) : null,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+      return { id: docRef.id };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rodadas'] });
+      queryClient.invalidateQueries({ queryKey: ['rodada-atual'] });
+    },
+  });
+};
+
+// Mutation para atualizar rodada
+export const useAtualizarRodada = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      data: Partial<{
+        numero: number;
+        status: string;
+        data_inicio?: Date | null;
+        data_fechamento?: Date | null;
+      }>;
+    }) => {
+      const { id, data } = payload;
+      const updateData: Record<string, any> = { ...data, updated_at: serverTimestamp() };
+      if (data.data_inicio instanceof Date) {
+        updateData.data_inicio = Timestamp.fromDate(data.data_inicio);
+      }
+      if (data.data_fechamento instanceof Date) {
+        updateData.data_fechamento = Timestamp.fromDate(data.data_fechamento);
+      }
+      await updateDoc(doc(db, 'rodadas', id), updateData);
+      return { id };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rodadas'] });
+      queryClient.invalidateQueries({ queryKey: ['rodada-atual'] });
+    },
   });
 };

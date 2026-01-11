@@ -14,7 +14,7 @@ import { URL_ESCUDOS } from "@/constants/urls";
 type Resultado = "casa" | "empate" | "visitante" | null;
 
 interface Palpite {
-  jogoId: number;
+  jogoId: string;
   resultado: Resultado;
   placarCasa: string;
   placarVisitante: string;
@@ -22,7 +22,7 @@ interface Palpite {
 
 export default function Palpites() {
   const { profile } = useAuth();
-  const [palpites, setPalpites] = useState<Record<number, Palpite>>({});
+  const [palpites, setPalpites] = useState<Record<string, Palpite>>({});
 
   const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
   const { data: proximosJogos, isLoading: loadingJogos } = useProximosJogos();
@@ -30,8 +30,9 @@ export default function Palpites() {
 
   const jogos = proximosJogos || [];
   const rodada = rodadaAtual || null;
+  const isExpired = rodada?.data_fechamento ? new Date() > new Date(rodada.data_fechamento) : false;
 
-  const handleResultadoChange = (jogoId: number, resultado: Resultado) => {
+  const handleResultadoChange = (jogoId: string, resultado: Resultado) => {
     setPalpites((prev) => ({
       ...prev,
       [jogoId]: {
@@ -60,6 +61,11 @@ export default function Palpites() {
   };
 
   const handleSalvar = () => {
+    if (isExpired) {
+      toast.error("Palpites encerrados para esta rodada");
+      return;
+    }
+
     const palpitosCompletos = Object.values(palpites).filter(
       (p) => p.resultado && p.placarCasa && p.placarVisitante
     );
@@ -87,12 +93,19 @@ export default function Palpites() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">Fazer Palpites</h1>
-            <p className="text-muted-foreground">Rodada {rodada.numero} - Brasileirão Série A</p>
+            <p className="text-muted-foreground">Rodada {rodada?.numero ?? "-"} - Brasileirão Série A</p>
           </div>
-          <Badge variant="outline" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            {rodada ? `Fecha em: ${new Date(rodada.data_fechamento || rodada.dataFechamento || "").toLocaleString()}` : "Aguardando rodada"}
-          </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              {rodada
+                ? `Fecha em: ${new Date(rodada.data_fechamento || rodada.dataFechamento || "").toLocaleString()}`
+                : "Aguardando rodada"}
+            </Badge>
+            {isExpired && (
+              <Badge variant="destructive">Palpites encerrados</Badge>
+            )}
+          </div>
         </div>
 
         {/* Progress Card */}
@@ -112,6 +125,18 @@ export default function Palpites() {
             </div>
           </CardContent>
         </Card>
+
+        {isExpired && (
+          <Card className="border-destructive/50 bg-destructive/10">
+            <CardContent className="flex items-start gap-3 pt-6 text-destructive-foreground">
+              <AlertCircle className="h-5 w-5 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Palpites Encerrados</p>
+                <p className="text-sm">O prazo para enviar palpites desta rodada acabou.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Alert Info */}
         {(!jogosDisponiveis) ? (
@@ -200,7 +225,7 @@ export default function Palpites() {
                         variant={palpite?.resultado === "casa" ? "default" : "outline"}
                         onClick={() => handleResultadoChange(jogo.id, "casa")}
                         className="w-full"
-                        disabled={!jogosDisponiveis}
+                        disabled={!jogosDisponiveis || isExpired}
                       >
                         Vitória { (jogo.time_casa || jogo.casa || "").split(" ")[0] }
                       </Button>
@@ -208,6 +233,7 @@ export default function Palpites() {
                         variant={palpite?.resultado === "empate" ? "default" : "outline"}
                         onClick={() => handleResultadoChange(jogo.id, "empate")}
                         className="w-full"
+                        disabled={!jogosDisponiveis || isExpired}
                       >
                         Empate
                       </Button>
@@ -215,7 +241,7 @@ export default function Palpites() {
                         variant={palpite?.resultado === "visitante" ? "default" : "outline"}
                         onClick={() => handleResultadoChange(jogo.id, "visitante")}
                         className="w-full"
-                        disabled={!jogosDisponiveis}
+                        disabled={!jogosDisponiveis || isExpired}
                       >
                         Vitória { (jogo.time_visitante || jogo.visitante || "").split(" ")[0] }
                       </Button>
@@ -237,7 +263,7 @@ export default function Palpites() {
                           className="w-16 text-center text-lg font-bold"
                           value={palpite?.placarCasa || ""}
                           onChange={(e) => handlePlacarChange(jogo.id, "placarCasa", e.target.value)}
-                          disabled={!jogosDisponiveis}
+                          disabled={!jogosDisponiveis || isExpired}
                         />
                       </div>
                       <span className="text-2xl font-bold text-muted-foreground mt-6">X</span>
@@ -252,7 +278,7 @@ export default function Palpites() {
                           className="w-16 text-center text-lg font-bold"
                           value={palpite?.placarVisitante || ""}
                           onChange={(e) => handlePlacarChange(jogo.id, "placarVisitante", e.target.value)}
-                          disabled={!jogosDisponiveis}
+                          disabled={!jogosDisponiveis || isExpired}
                         />
                       </div>
                     </div>
@@ -273,7 +299,7 @@ export default function Palpites() {
               onClick={handleSalvar}
               size="lg"
               className="w-full"
-              disabled={!jogosDisponiveis || getPalpitosCompletos() === 0}
+                disabled={isExpired || !jogosDisponiveis || getPalpitosCompletos() === 0}
             >
               <Save className="mr-2 h-5 w-5" />
               Salvar Todos os Palpites ({getPalpitosCompletos()}/{jogos.length || 0})
