@@ -8,6 +8,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { URL_ESCUDOS } from "@/constants/urls";
+
+const TEAMS = [
+  { name: "Athletico-PR", slug: "atletico-pr.webp" },
+  { name: "Atlético-MG", slug: "atletico-mg.webp" },
+  { name: "Bahia", slug: "bahia.webp" },
+  { name: "Botafogo", slug: "botafogo.webp" },
+  { name: "Chapecoense", slug: "chapecoense.webp" },
+  { name: "Corinthians", slug: "corinthians.webp" },
+  { name: "Coritiba", slug: "coritiba.webp" },
+  { name: "Cruzeiro", slug: "cruzeiro.webp" },
+  { name: "Flamengo", slug: "flamengo.webp" },
+  { name: "Fluminense", slug: "fluminense.webp" },
+  { name: "Grêmio", slug: "grêmio.webp" },
+  { name: "Internacional", slug: "internacional.webp" },
+  { name: "Mirassol", slug: "mirassol.webp" },
+  { name: "Palmeiras", slug: "palmeiras.webp" },
+  { name: "Bragantino", slug: "bragantino.webp" },
+  { name: "Remo", slug: "remo.webp" },
+  { name: "Santos", slug: "santos.webp" },
+  { name: "Vasco", slug: "vasco da gama.webp" },
+  { name: "Vitória", slug: "vitória.webp" },
+];
+
+const getTeamBySlug = (slug: string) => TEAMS.find((team) => team.slug === slug);
 
 export default function Admin() {
   const [novoJogo, setNovoJogo] = useState({
@@ -33,7 +65,21 @@ export default function Admin() {
 
   const handleCadastrarJogo = (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Jogo cadastrado com sucesso!");
+
+    if (!novoJogo.timeCasa || !novoJogo.timeVisitante) {
+      toast.error("Selecione mandante e visitante");
+      return;
+    }
+
+    if (novoJogo.timeCasa === novoJogo.timeVisitante) {
+      toast.error("Os times devem ser diferentes");
+      return;
+    }
+
+    const mandanteName = getTeamBySlug(novoJogo.timeCasa)?.name || "Mandante";
+    const visitanteName = getTeamBySlug(novoJogo.timeVisitante)?.name || "Visitante";
+
+    toast.success(`Jogo cadastrado: ${mandanteName} x ${visitanteName}`);
     setNovoJogo({
       timeCasa: "",
       timeVisitante: "",
@@ -90,28 +136,64 @@ export default function Admin() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="timeCasa">Time Mandante</Label>
-                      <Input
-                        id="timeCasa"
-                        placeholder="Ex: Flamengo"
+                      <Select
                         value={novoJogo.timeCasa}
-                        onChange={(e) =>
-                          setNovoJogo({ ...novoJogo, timeCasa: e.target.value })
+                        onValueChange={(value) =>
+                          setNovoJogo({ ...novoJogo, timeCasa: value })
                         }
-                        required
-                      />
+                      >
+                        <SelectTrigger id="timeCasa" className="w-full">
+                          <SelectValue placeholder="Selecione o mandante" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TEAMS.filter((team) => team.slug !== novoJogo.timeVisitante).map(
+                            (team) => (
+                              <SelectItem key={team.slug} value={team.slug}>
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={`${URL_ESCUDOS}${team.slug}`}
+                                    alt={team.name}
+                                    className="h-5 w-5 rounded-full object-contain"
+                                    loading="lazy"
+                                  />
+                                  <span>{team.name}</span>
+                                </div>
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="timeVisitante">Time Visitante</Label>
-                      <Input
-                        id="timeVisitante"
-                        placeholder="Ex: Palmeiras"
+                      <Select
                         value={novoJogo.timeVisitante}
-                        onChange={(e) =>
-                          setNovoJogo({ ...novoJogo, timeVisitante: e.target.value })
+                        onValueChange={(value) =>
+                          setNovoJogo({ ...novoJogo, timeVisitante: value })
                         }
-                        required
-                      />
+                      >
+                        <SelectTrigger id="timeVisitante" className="w-full">
+                          <SelectValue placeholder="Selecione o visitante" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TEAMS.filter((team) => team.slug !== novoJogo.timeCasa).map(
+                            (team) => (
+                              <SelectItem key={team.slug} value={team.slug}>
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={`${URL_ESCUDOS}${team.slug}`}
+                                    alt={team.name}
+                                    className="h-5 w-5 rounded-full object-contain"
+                                    loading="lazy"
+                                  />
+                                  <span>{team.name}</span>
+                                </div>
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
