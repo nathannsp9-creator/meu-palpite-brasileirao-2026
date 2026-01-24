@@ -34,6 +34,7 @@ export interface Rodada {
 export interface Jogo {
   id: string;
   rodada_id: string;
+  rodada_numero?: number;
   time_casa: string;
   time_visitante: string;
   data_jogo: Date;
@@ -51,9 +52,11 @@ export interface Palpite {
   id: string;
   usuario_id: string;
   jogo_id: string;
+  rodada_id: string;
   palpite_casa: number;
   palpite_visitante: number;
   pontos_obtidos: number | null;
+  status: 'pendente' | 'calculado';
   created_at: Date;
   updated_at: Date;
 }

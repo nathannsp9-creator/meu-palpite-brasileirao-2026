@@ -11,7 +11,8 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
-  deleteDoc
+  deleteDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Rodada, Jogo } from '@/types/firebase';
@@ -21,32 +22,104 @@ export const useRodadaAtual = () => {
   return useQuery({
     queryKey: ['rodada-atual'],
     queryFn: async (): Promise<Rodada | null> => {
-      const rodasRef = collection(db, 'rodadas');
-      const q = query(
-        rodasRef,
-        where('status', 'in', ['em_andamento', 'aguardando']),
-        orderBy('numero', 'desc'),
-        limit(1)
-      );
+      try {
+        console.log('[useRodadaAtual] Iniciando busca por rodada atual...');
+        
+        const rodasRef = collection(db, 'rodadas');
+        
+        // Primeiro, tentar buscar por status 'em_andamento' (minúsculo)
+        let q = query(
+          rodasRef,
+          where('status', '==', 'em_andamento'),
+          orderBy('numero', 'desc'),
+          limit(1)
+        );
 
-      const snapshot = await getDocs(q);
-      
-      if (snapshot.empty) return null;
+        let snapshot = await getDocs(q);
+        
+        // Se não encontrar, tentar buscar por 'aguardando'
+        if (snapshot.empty) {
+          console.log('[useRodadaAtual] Nenhuma rodada com status "em_andamento", tentando "aguardando"...');
+          q = query(
+            rodasRef,
+            where('status', '==', 'aguardando'),
+            orderBy('numero', 'desc'),
+            limit(1)
+          );
+          snapshot = await getDocs(q);
+        }
+        
+        if (snapshot.empty) {
+          console.log('[useRodadaAtual] Nenhuma rodada encontrada com status "em_andamento" ou "aguardando"');
+          console.log('[useRodadaAtual] Verificando todas as rodadas disponíveis...');
+          
+          // Buscar todas as rodadas para debug
+          const todasRodadas = query(rodasRef, orderBy('numero', 'desc'), limit(5));
+          const todasSnapshot = await getDocs(todasRodadas);
+          
+          if (!todasSnapshot.empty) {
+            console.log('[useRodadaAtual] Rodadas encontradas (últimas 5):');
+            todasSnapshot.docs.forEach(doc => {
+              const data = doc.data();
+              console.log(`  - ID: ${doc.id}, Número: ${data.numero}, Status: ${data.status}`);
+            });
+          } else {
+            console.log('[useRodadaAtual] Nenhuma rodada encontrada no banco de dados');
+          }
+          
+          return null;
+        }
 
-      const doc = snapshot.docs[0];
-      const data = doc.data();
+        const doc = snapshot.docs[0];
+        const data = doc.data();
 
-      return {
-        id: doc.id,
-        numero: data.numero,
-        status: data.status,
-        data_inicio: data.data_inicio?.toDate() || new Date(),
-        data_fechamento: data.data_fechamento?.toDate() || new Date(),
-        created_at: data.created_at?.toDate() || new Date(),
-        updated_at: data.updated_at?.toDate() || new Date(),
-      } as Rodada;
+        const rodada = {
+          id: doc.id,
+          numero: data.numero,
+          status: data.status,
+          data_inicio: data.data_inicio?.toDate() || new Date(),
+          data_fechamento: data.data_fechamento?.toDate() || new Date(),
+          created_at: data.created_at?.toDate() || new Date(),
+          updated_at: data.updated_at?.toDate() || new Date(),
+        } as Rodada;
+
+        console.log('[useRodadaAtual] Rodada encontrada:', {
+          id: rodada.id,
+          numero: rodada.numero,
+          status: rodada.status,
+          data_fechamento: rodada.data_fechamento.toISOString(),
+        });
+
+        return rodada;
+      } catch (error: any) {
+        console.error('[useRodadaAtual] Erro ao buscar rodada atual:', error);
+        console.error('[useRodadaAtual] Detalhes do erro:', {
+          code: error?.code,
+          message: error?.message,
+          stack: error?.stack,
+        });
+        
+        // Tratamento específico para erros de índice do Firestore
+        if (error?.code === 'failed-precondition' || error?.message?.includes('index')) {
+          console.error('[useRodadaAtual] Erro de índice do Firestore detectado');
+          throw new Error(
+            'Índice composto necessário no Firestore. ' +
+            'Crie um índice para: status (Ascending) e numero (Descending) na coleção "rodadas". ' +
+            'O link para criar o índice geralmente aparece no erro do console.'
+          );
+        }
+        
+        // Tratamento para outros erros
+        if (error?.code === 'permission-denied') {
+          console.error('[useRodadaAtual] Erro de permissão ao acessar rodadas');
+          throw new Error('Sem permissão para acessar rodadas. Verifique as regras do Firestore.');
+        }
+        
+        throw error;
+      }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 2, // Tentar novamente em caso de erro
   });
 };
 
@@ -81,34 +154,49 @@ export const useProximosJogos = (limitCount: number = 10) => {
   return useQuery({
     queryKey: ['proximos-jogos', limitCount],
     queryFn: async (): Promise<Jogo[]> => {
-      const jogosRef = collection(db, 'jogos');
-      const q = query(
-        jogosRef,
-        where('status', '==', 'agendado'),
-        orderBy('data_jogo', 'asc'),
-        limit(limitCount)
-      );
+      try {
+        const jogosRef = collection(db, 'jogos');
+        const q = query(
+          jogosRef,
+          where('status', '==', 'agendado'),
+          orderBy('data_jogo', 'asc'),
+          limit(limitCount)
+        );
 
-      const snapshot = await getDocs(q);
+        const snapshot = await getDocs(q);
 
-      return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          rodada_id: data.rodada_id,
-          time_casa: data.time_casa,
-          time_visitante: data.time_visitante,
-          data_jogo: data.data_jogo?.toDate() || new Date(),
-          placar_casa: data.placar_casa,
-          placar_visitante: data.placar_visitante,
-          status: data.status,
-          logo_casa: data.logo_casa,
-          logo_visitante: data.logo_visitante,
-          api_fixture_id: data.api_fixture_id,
-          created_at: data.created_at?.toDate() || new Date(),
-          updated_at: data.updated_at?.toDate() || new Date(),
-        } as Jogo;
-      });
+        return snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            rodada_id: data.rodada_id,
+            rodada_numero: data.rodada_numero,
+            time_casa: data.time_casa,
+            time_visitante: data.time_visitante,
+            data_jogo: data.data_jogo?.toDate() || new Date(),
+            placar_casa: data.placar_casa,
+            placar_visitante: data.placar_visitante,
+            status: data.status,
+            logo_casa: data.logo_casa,
+            logo_visitante: data.logo_visitante,
+            api_fixture_id: data.api_fixture_id,
+            created_at: data.created_at?.toDate() || new Date(),
+            updated_at: data.updated_at?.toDate() || new Date(),
+          } as Jogo;
+        });
+      } catch (error: any) {
+        // Tratamento específico para erros de índice do Firestore
+        if (error?.code === 'failed-precondition' || error?.message?.includes('index')) {
+          console.error('Erro de índice do Firestore:', error);
+          throw new Error(
+            'Índice composto necessário no Firestore. ' +
+            'Crie um índice para: status (Ascending) e data_jogo (Ascending) na coleção "jogos". ' +
+            'O link para criar o índice geralmente aparece no erro do console.'
+          );
+        }
+        console.error('Erro ao buscar próximos jogos:', error);
+        throw error;
+      }
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -121,33 +209,49 @@ export const useJogosPorRodada = (rodadaId?: string) => {
     queryFn: async (): Promise<Jogo[]> => {
       if (!rodadaId) return [];
 
-      const jogosRef = collection(db, 'jogos');
-      const q = query(
-        jogosRef,
-        where('rodada_id', '==', rodadaId),
-        orderBy('data_jogo', 'asc')
-      );
+      try {
+        const jogosRef = collection(db, 'jogos');
+        const q = query(
+          jogosRef,
+          where('rodada_id', '==', rodadaId),
+          orderBy('data_jogo', 'asc')
+        );
 
-      const snapshot = await getDocs(q);
+        const snapshot = await getDocs(q);
 
-      return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          rodada_id: data.rodada_id,
-          time_casa: data.time_casa,
-          time_visitante: data.time_visitante,
-          data_jogo: data.data_jogo?.toDate() || new Date(),
-          placar_casa: data.placar_casa,
-          placar_visitante: data.placar_visitante,
-          status: data.status,
-          logo_casa: data.logo_casa,
-          logo_visitante: data.logo_visitante,
-          api_fixture_id: data.api_fixture_id,
-          created_at: data.created_at?.toDate() || new Date(),
-          updated_at: data.updated_at?.toDate() || new Date(),
-        } as Jogo;
-      });
+        return snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            rodada_id: data.rodada_id,
+            rodada_numero: data.rodada_numero,
+            time_casa: data.time_casa,
+            time_visitante: data.time_visitante,
+            data_jogo: data.data_jogo?.toDate() || new Date(),
+            placar_casa: data.placar_casa,
+            placar_visitante: data.placar_visitante,
+            status: data.status,
+            logo_casa: data.logo_casa,
+            logo_visitante: data.logo_visitante,
+            api_fixture_id: data.api_fixture_id,
+            created_at: data.created_at?.toDate() || new Date(),
+            updated_at: data.updated_at?.toDate() || new Date(),
+          } as Jogo;
+        });
+      } catch (error: any) {
+        // Tratamento específico para erros de índice do Firestore
+        if (error?.code === 'failed-precondition' || error?.message?.includes('index')) {
+          console.error('Erro de índice do Firestore:', error);
+          throw new Error(
+            'Índice composto necessário no Firestore. ' +
+            'Crie um índice para: rodada_id (Ascending) e data_jogo (Ascending) na coleção "jogos". ' +
+            'O link para criar o índice geralmente aparece no erro do console.'
+          );
+        }
+        // Re-lançar outros erros
+        console.error('Erro ao buscar jogos por rodada:', error);
+        throw error;
+      }
     },
     enabled: !!rodadaId,
     staleTime: 5 * 60 * 1000,
@@ -161,6 +265,7 @@ export const useCriarJogo = () => {
   return useMutation({
     mutationFn: async (payload: {
       rodada_id: string;
+      rodada_numero?: number;
       time_casa: string;
       time_visitante: string;
       data_jogo: Date;
@@ -177,10 +282,15 @@ export const useCriarJogo = () => {
       });
       return { id: docRef.id, data: payload };
     },
-    onSuccess: (_result, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['proximos-jogos'] });
-      queryClient.invalidateQueries({ queryKey: ['jogos-rodada'] });
-      queryClient.invalidateQueries({ queryKey: ['jogos-rodada', variables.rodada_id] });
+    onSuccess: async (_result, variables) => {
+      // Invalidar todas as queries relacionadas
+      await queryClient.invalidateQueries({ queryKey: ['proximos-jogos'] });
+      await queryClient.invalidateQueries({ queryKey: ['jogos-rodada'] });
+      await queryClient.invalidateQueries({ queryKey: ['jogos-rodada', variables.rodada_id] });
+      
+      // Refetch explícito para garantir atualização imediata
+      await queryClient.refetchQueries({ queryKey: ['jogos-rodada', variables.rodada_id] });
+      await queryClient.refetchQueries({ queryKey: ['proximos-jogos'] });
     },
   });
 };
@@ -293,6 +403,109 @@ export const useAtualizarRodada = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rodadas'] });
       queryClient.invalidateQueries({ queryKey: ['rodada-atual'] });
+    },
+  });
+};
+
+// Função helper para calcular pontos de um palpite
+export function calcularPontos(
+  palpiteCasa: number,
+  palpiteVisitante: number,
+  placarCasa: number,
+  placarVisitante: number
+): number {
+  // 5 pontos: placar exato
+  if (palpiteCasa === placarCasa && palpiteVisitante === placarVisitante) {
+    return 5;
+  }
+  
+  // 3 pontos: acertou resultado
+  const resultadoReal = placarCasa > placarVisitante ? 'casa' : 
+                        placarCasa < placarVisitante ? 'visitante' : 'empate';
+  const resultadoPalpite = palpiteCasa > palpiteVisitante ? 'casa' :
+                           palpiteCasa < palpiteVisitante ? 'visitante' : 'empate';
+  
+  if (resultadoReal === resultadoPalpite) {
+    return 3;
+  }
+  
+  // 0 pontos
+  return 0;
+}
+
+// Mutation para finalizar jogo e calcular pontos dos palpites
+export const useFinalizarJogoECalcularPontos = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      jogoId: string;
+      rodadaId: string;
+      placarCasa: number;
+      placarVisitante: number;
+    }) => {
+      const { jogoId, rodadaId, placarCasa, placarVisitante } = payload;
+
+      // Passo A: Atualizar jogo com placar e status finalizado
+      const jogoRef = doc(db, 'jogos', jogoId);
+      await updateDoc(jogoRef, {
+        placar_casa: placarCasa,
+        placar_visitante: placarVisitante,
+        status: 'finalizado',
+        updated_at: serverTimestamp(),
+      });
+
+      // Passo B: Buscar todos os palpites do jogo
+      const palpitesRef = collection(db, 'palpites');
+      const palpitesQuery = query(
+        palpitesRef,
+        where('jogo_id', '==', jogoId)
+      );
+      const palpitesSnapshot = await getDocs(palpitesQuery);
+
+      if (palpitesSnapshot.empty) {
+        return { jogoId, palpitesAtualizados: 0 };
+      }
+
+      // Passo C e D: Calcular pontos e atualizar palpites em batch
+      const BATCH_LIMIT = 500; // Limite do Firestore
+      const palpites = palpitesSnapshot.docs;
+      let totalAtualizados = 0;
+
+      // Processar em batches se necessário
+      for (let i = 0; i < palpites.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        const batchPalpites = palpites.slice(i, i + BATCH_LIMIT);
+
+        batchPalpites.forEach((palpiteDoc) => {
+          const data = palpiteDoc.data();
+          const pontos = calcularPontos(
+            data.palpite_casa,
+            data.palpite_visitante,
+            placarCasa,
+            placarVisitante
+          );
+
+          const palpiteRef = doc(db, 'palpites', palpiteDoc.id);
+          batch.update(palpiteRef, {
+            pontos_obtidos: pontos,
+            updated_at: serverTimestamp(),
+          });
+        });
+
+        await batch.commit();
+        totalAtualizados += batchPalpites.length;
+      }
+
+      return { jogoId, rodadaId, palpitesAtualizados: totalAtualizados };
+    },
+    onSuccess: async (_result, variables) => {
+      // Invalidar cache de jogos, palpites e ranking
+      await queryClient.invalidateQueries({ queryKey: ['jogos-rodada', variables.rodadaId] });
+      await queryClient.invalidateQueries({ queryKey: ['jogos-rodada'] });
+      await queryClient.invalidateQueries({ queryKey: ['proximos-jogos'] });
+      await queryClient.invalidateQueries({ queryKey: ['meus-palpites'] });
+      await queryClient.invalidateQueries({ queryKey: ['ranking'] });
     },
   });
 };

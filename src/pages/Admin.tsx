@@ -5,8 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -14,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Plus, Save, Trash2, Edit3, Loader2 } from "lucide-react";
+import { Settings, Plus, Save, Trash2, Edit3, Loader2, Calendar, Clock, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { TIMES } from "@/constants/times";
 import { URL_ESCUDOS } from "@/constants/urls";
@@ -26,8 +33,9 @@ import {
   useCriarJogo,
   useAtualizarJogo,
   useDeletarJogo,
+  useFinalizarJogoECalcularPontos,
 } from "@/hooks/useJogosFirebase";
-import { Jogo } from "@/types/firebase";
+import { Jogo, Rodada } from "@/types/firebase";
 
 const toDateTimeLocal = (date?: Date | null) => {
   if (!date) return "";
@@ -41,28 +49,44 @@ const parseDateTimeLocal = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-type NovoJogoForm = {
-  mandante: string;
-  visitante: string;
+const getStatusBadgeVariant = (status: string) => {
+  switch (status) {
+    case "em_andamento":
+      return "default";
+    case "finalizada":
+      return "secondary";
+    case "aguardando":
+    default:
+      return "outline";
+  }
 };
 
-type JogoEditState = {
-  mandante: string;
-  visitante: string;
-  status: string;
-};
-
-type ResultadoEditState = {
-  placarCasa: string;
-  placarVisitante: string;
+const getGameStatusBadgeVariant = (status: string) => {
+  switch (status) {
+    case "ao_vivo":
+      return "destructive";
+    case "finalizado":
+      return "secondary";
+    case "cancelado":
+      return "outline";
+    case "agendado":
+    default:
+      return "default";
+  }
 };
 
 export default function Admin() {
   const queryClient = useQueryClient();
-  const { data: rodadas, isLoading: loadingRodadas } = useRodadas();
-  const [selectedRodadaId, setSelectedRodadaId] = useState<string | "new" | null>(null);
-  const [rodadaResultadosId, setRodadaResultadosId] = useState<string | null>(null);
+  const { data: rodadas, isLoading: loadingRodadas, error: errorRodadas } = useRodadas();
+  const [selectedRodadaId, setSelectedRodadaId] = useState<string | null>(null);
+  
+  // Estados dos modais
+  const [modalNovaRodada, setModalNovaRodada] = useState(false);
+  const [modalAdicionarJogo, setModalAdicionarJogo] = useState(false);
+  const [modalEditarJogo, setModalEditarJogo] = useState<Jogo | null>(null);
+  const [modalEditarPlacar, setModalEditarPlacar] = useState<Jogo | null>(null);
 
+  // Formulário de nova rodada
   const [rodadaForm, setRodadaForm] = useState({
     numero: "",
     status: "aguardando",
@@ -70,19 +94,29 @@ export default function Admin() {
     data_fechamento: "",
   });
 
-  const [novoJogo, setNovoJogo] = useState<NovoJogoForm>({
-    mandante: "",
-    visitante: "",
+  // Formulário de novo jogo
+  const [novoJogoForm, setNovoJogoForm] = useState({
+    time_casa: "",
+    time_visitante: "",
+    data_jogo: "",
   });
 
-  const [jogoEdits, setJogoEdits] = useState<Record<string, JogoEditState>>({});
-  const [resultadoEdits, setResultadoEdits] = useState<Record<string, ResultadoEditState>>({});
+  // Formulário de editar jogo
+  const [editarJogoForm, setEditarJogoForm] = useState({
+    time_casa: "",
+    time_visitante: "",
+    data_jogo: "",
+    status: "agendado",
+  });
 
-  const { data: jogosRodada, isLoading: loadingJogosRodada } = useJogosPorRodada(
-    selectedRodadaId && selectedRodadaId !== "new" ? selectedRodadaId : undefined
-  );
-  const { data: jogosResultados, isLoading: loadingResultados } = useJogosPorRodada(
-    rodadaResultadosId || undefined
+  // Formulário de editar placar
+  const [editarPlacarForm, setEditarPlacarForm] = useState({
+    placar_casa: "",
+    placar_visitante: "",
+  });
+
+  const { data: jogosRodada, isLoading: loadingJogosRodada, error: errorJogos } = useJogosPorRodada(
+    selectedRodadaId || undefined
   );
 
   const createRodada = useCriarRodada();
@@ -90,41 +124,71 @@ export default function Admin() {
   const createJogo = useCriarJogo();
   const updateJogo = useAtualizarJogo();
   const deleteJogo = useDeletarJogo();
+  const finalizarJogoECalcular = useFinalizarJogoECalcularPontos();
 
   const selectedRodada = useMemo(
     () => rodadas?.find((r) => r.id === selectedRodadaId) || null,
     [rodadas, selectedRodadaId]
   );
 
+  // Selecionar primeira rodada automaticamente
   useEffect(() => {
     if (!selectedRodadaId && rodadas && rodadas.length > 0) {
       setSelectedRodadaId(rodadas[0].id);
-      setRodadaResultadosId(rodadas[0].id);
     }
   }, [rodadas, selectedRodadaId]);
 
+  // Resetar formulário quando modal de nova rodada abre
   useEffect(() => {
-    if (selectedRodada && selectedRodadaId !== "new") {
+    if (modalNovaRodada) {
       setRodadaForm({
-        numero: String(selectedRodada.numero || ""),
-        status: selectedRodada.status || "aguardando",
-        data_inicio: toDateTimeLocal(selectedRodada.data_inicio),
-        data_fechamento: toDateTimeLocal(selectedRodada.data_fechamento),
+        numero: "",
+        status: "aguardando",
+        data_inicio: "",
+        data_fechamento: "",
       });
-    } else if (selectedRodadaId === "new") {
-      setRodadaForm({ numero: "", status: "aguardando", data_inicio: "", data_fechamento: "" });
     }
-  }, [selectedRodada, selectedRodadaId]);
+  }, [modalNovaRodada]);
 
-  const handleNovaRodada = () => {
-    setSelectedRodadaId("new");
-    setRodadaForm({ numero: "", status: "aguardando", data_inicio: "", data_fechamento: "" });
-    setNovoJogo({ mandante: "", visitante: "" });
-    setJogoEdits({});
-  };
+  // Resetar formulário quando modal de adicionar jogo abre
+  useEffect(() => {
+    if (modalAdicionarJogo) {
+      const dataInicio = selectedRodada?.data_inicio instanceof Date 
+        ? selectedRodada.data_inicio 
+        : null;
+      setNovoJogoForm({
+        time_casa: "",
+        time_visitante: "",
+        data_jogo: dataInicio ? toDateTimeLocal(dataInicio) : "",
+      });
+    }
+  }, [modalAdicionarJogo, selectedRodada]);
 
-  const handleSalvarRodada = async (e: React.FormEvent) => {
+  // Preencher formulário quando modal de editar jogo abre
+  useEffect(() => {
+    if (modalEditarJogo) {
+      setEditarJogoForm({
+        time_casa: modalEditarJogo.logo_casa || "",
+        time_visitante: modalEditarJogo.logo_visitante || "",
+        data_jogo: toDateTimeLocal(modalEditarJogo.data_jogo),
+        status: modalEditarJogo.status || "agendado",
+      });
+    }
+  }, [modalEditarJogo]);
+
+  // Preencher formulário quando modal de editar placar abre
+  useEffect(() => {
+    if (modalEditarPlacar) {
+      setEditarPlacarForm({
+        placar_casa: modalEditarPlacar.placar_casa?.toString() || "",
+        placar_visitante: modalEditarPlacar.placar_visitante?.toString() || "",
+      });
+    }
+  }, [modalEditarPlacar]);
+
+  const handleCriarRodada = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!rodadaForm.numero) {
       toast.error("Informe o número da rodada");
       return;
@@ -132,7 +196,7 @@ export default function Admin() {
 
     const numero = Number(rodadaForm.numero);
     if (Number.isNaN(numero) || numero < 1 || numero > 38) {
-      toast.error("Número de rodada inválido");
+      toast.error("Número de rodada inválido (deve ser entre 1 e 38)");
       return;
     }
 
@@ -140,582 +204,854 @@ export default function Admin() {
     const dataFechamento = parseDateTimeLocal(rodadaForm.data_fechamento);
 
     try {
-      if (!selectedRodada || selectedRodadaId === "new") {
-        const res = await createRodada.mutateAsync({
-          numero,
-          status: rodadaForm.status,
-          data_inicio: dataInicio,
-          data_fechamento: dataFechamento,
-        });
-        toast.success(`Rodada ${numero} criada`);
-        setSelectedRodadaId(res.id);
-        setRodadaResultadosId(res.id);
-      } else {
-        await updateRodada.mutateAsync({
-          id: selectedRodada.id,
-          data: {
-            numero,
-            status: rodadaForm.status,
-            data_inicio: dataInicio ?? undefined,
-            data_fechamento: dataFechamento ?? undefined,
-          },
-        });
-        toast.success("Rodada atualizada");
-      }
+      const res = await createRodada.mutateAsync({
+        numero,
+        status: rodadaForm.status as "aguardando" | "em_andamento" | "finalizada",
+        data_inicio: dataInicio,
+        data_fechamento: dataFechamento,
+      });
+      
+      toast.success(`Rodada ${numero} criada com sucesso!`);
+      setModalNovaRodada(false);
+      
+      // Invalidar cache e selecionar nova rodada
+      await queryClient.invalidateQueries({ queryKey: ["rodadas"] });
+      setSelectedRodadaId(res.id);
     } catch (err: any) {
-      toast.error(err?.message || "Não foi possível salvar a rodada");
+      toast.error(err?.message || "Não foi possível criar a rodada");
     }
   };
 
   const handleAdicionarJogo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRodada || selectedRodadaId === "new") {
-      toast.error("Selecione ou crie uma rodada primeiro");
+    
+    if (!selectedRodada) {
+      toast.error("Selecione uma rodada primeiro");
       return;
     }
-    if (!novoJogo.mandante || !novoJogo.visitante) {
-      toast.error("Selecione os times do jogo");
+
+    if (!novoJogoForm.time_casa || !novoJogoForm.time_visitante) {
+      toast.error("Selecione os dois times");
       return;
     }
-    if (novoJogo.mandante === novoJogo.visitante) {
+
+    if (novoJogoForm.time_casa === novoJogoForm.time_visitante) {
       toast.error("Os times devem ser diferentes");
       return;
     }
 
-    const dataJogo = selectedRodada?.data_inicio || new Date();
+    const dataInicioRodada = selectedRodada.data_inicio instanceof Date 
+      ? selectedRodada.data_inicio 
+      : null;
+    const dataJogo = parseDateTimeLocal(novoJogoForm.data_jogo) || dataInicioRodada || new Date();
 
     try {
       await createJogo.mutateAsync({
         rodada_id: selectedRodada.id,
-        time_casa: TIMES.find((t) => t.slug === novoJogo.mandante)?.name || "Mandante",
-        time_visitante: TIMES.find((t) => t.slug === novoJogo.visitante)?.name || "Visitante",
-        logo_casa: novoJogo.mandante,
-        logo_visitante: novoJogo.visitante,
+        rodada_numero: selectedRodada.numero,
+        time_casa: TIMES.find((t) => t.slug === novoJogoForm.time_casa)?.name || "Mandante",
+        time_visitante: TIMES.find((t) => t.slug === novoJogoForm.time_visitante)?.name || "Visitante",
+        logo_casa: novoJogoForm.time_casa,
+        logo_visitante: novoJogoForm.time_visitante,
         data_jogo: dataJogo,
         status: "agendado",
       });
-      toast.success("Jogo cadastrado");
-      setNovoJogo({ mandante: "", visitante: "" });
-      queryClient.invalidateQueries({ queryKey: ["jogos-rodada", selectedRodada.id] });
+
+      toast.success("Jogo adicionado com sucesso!");
+      setModalAdicionarJogo(false);
+      
+      // Invalidar cache de jogos
+      await queryClient.invalidateQueries({ queryKey: ["jogos-rodada", selectedRodada.id] });
+      await queryClient.refetchQueries({ queryKey: ["jogos-rodada", selectedRodada.id] });
     } catch (err: any) {
-      toast.error(err?.message || "Não foi possível cadastrar o jogo");
+      toast.error(err?.message || "Não foi possível adicionar o jogo");
     }
   };
 
-  const handleAtualizarJogo = (jogo: Jogo) => {
-    const edit = jogoEdits[jogo.id];
-    const payload: any = {
-      time_casa: edit?.mandante || jogo.time_casa,
-      time_visitante: edit?.visitante || jogo.time_visitante,
-      status: edit?.status || jogo.status || "agendado",
-    };
+  const handleEditarJogo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!modalEditarJogo) return;
 
-    updateJogo.mutate(
-      { id: jogo.id, data: payload },
-      {
-        onSuccess: () => toast.success("Jogo atualizado"),
-        onError: (err: any) => toast.error(err?.message || "Erro ao atualizar jogo"),
-      }
-    );
-  };
-
-  const handleExcluirJogo = (id: string) => {
-    deleteJogo.mutate(
-      { id },
-      {
-        onSuccess: () => toast.success("Jogo removido"),
-        onError: (err: any) => toast.error(err?.message || "Erro ao remover jogo"),
-      }
-    );
-  };
-
-  const handleSalvarResultado = (jogo: Jogo) => {
-    const edit = resultadoEdits[jogo.id];
-    const placarCasa = edit?.placarCasa ?? (jogo.placar_casa ?? "");
-    const placarVisitante = edit?.placarVisitante ?? (jogo.placar_visitante ?? "");
-
-    if (placarCasa === "" || placarVisitante === "") {
-      toast.error("Informe os dois placares");
+    if (!editarJogoForm.time_casa || !editarJogoForm.time_visitante) {
+      toast.error("Selecione os dois times");
       return;
     }
 
-    const placarCasaNum = Number(placarCasa);
-    const placarVisitanteNum = Number(placarVisitante);
-    if (Number.isNaN(placarCasaNum) || Number.isNaN(placarVisitanteNum)) {
-      toast.error("Placar inválido");
+    if (editarJogoForm.time_casa === editarJogoForm.time_visitante) {
+      toast.error("Os times devem ser diferentes");
       return;
     }
 
-    updateJogo.mutate(
-      {
-        id: jogo.id,
+    const dataJogo = parseDateTimeLocal(editarJogoForm.data_jogo) || modalEditarJogo.data_jogo;
+
+    try {
+      await updateJogo.mutateAsync({
+        id: modalEditarJogo.id,
         data: {
-          placar_casa: placarCasaNum,
-          placar_visitante: placarVisitanteNum,
-          status: "finalizado",
+          time_casa: TIMES.find((t) => t.slug === editarJogoForm.time_casa)?.name || modalEditarJogo.time_casa,
+          time_visitante: TIMES.find((t) => t.slug === editarJogoForm.time_visitante)?.name || modalEditarJogo.time_visitante,
+          logo_casa: editarJogoForm.time_casa,
+          logo_visitante: editarJogoForm.time_visitante,
+          data_jogo: dataJogo,
+          status: editarJogoForm.status as "agendado" | "ao_vivo" | "finalizado" | "cancelado",
         },
-      },
-      {
-        onSuccess: () => toast.success("Placar salvo"),
-        onError: (err: any) => toast.error(err?.message || "Erro ao salvar placar"),
+      });
+
+      toast.success("Jogo atualizado com sucesso!");
+      setModalEditarJogo(null);
+      
+      // Invalidar cache de jogos
+      if (modalEditarJogo.rodada_id) {
+        await queryClient.invalidateQueries({ queryKey: ["jogos-rodada", modalEditarJogo.rodada_id] });
+        await queryClient.refetchQueries({ queryKey: ["jogos-rodada", modalEditarJogo.rodada_id] });
       }
-    );
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível atualizar o jogo");
+    }
+  };
+
+  const handleDeletarJogo = async () => {
+    if (!modalEditarJogo) return;
+
+    const rodadaId = modalEditarJogo.rodada_id;
+
+    try {
+      await deleteJogo.mutateAsync({ id: modalEditarJogo.id });
+      toast.success("Jogo removido com sucesso!");
+      setModalEditarJogo(null);
+      
+      // Invalidar cache de jogos
+      if (rodadaId) {
+        await queryClient.invalidateQueries({ queryKey: ["jogos-rodada", rodadaId] });
+        await queryClient.refetchQueries({ queryKey: ["jogos-rodada", rodadaId] });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível remover o jogo");
+    }
+  };
+
+  const handleSalvarPlacarECalcular = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!modalEditarPlacar) return;
+
+    const placarCasa = Number(editarPlacarForm.placar_casa);
+    const placarVisitante = Number(editarPlacarForm.placar_visitante);
+
+    // Validação
+    if (editarPlacarForm.placar_casa === "" || editarPlacarForm.placar_visitante === "") {
+      toast.error("Informe ambos os placares");
+      return;
+    }
+
+    if (Number.isNaN(placarCasa) || placarCasa < 0) {
+      toast.error("Placar do time da casa deve ser um número >= 0");
+      return;
+    }
+
+    if (Number.isNaN(placarVisitante) || placarVisitante < 0) {
+      toast.error("Placar do time visitante deve ser um número >= 0");
+      return;
+    }
+
+    try {
+      const result = await finalizarJogoECalcular.mutateAsync({
+        jogoId: modalEditarPlacar.id,
+        rodadaId: modalEditarPlacar.rodada_id,
+        placarCasa,
+        placarVisitante,
+      });
+
+      toast.success(
+        `Placar salvo e pontuação calculada para ${result.palpitesAtualizados} usuário(s)!`
+      );
+      setModalEditarPlacar(null);
+      
+      // Invalidar cache e refetch
+      if (modalEditarPlacar.rodada_id) {
+        await queryClient.invalidateQueries({ queryKey: ["jogos-rodada", modalEditarPlacar.rodada_id] });
+        await queryClient.refetchQueries({ queryKey: ["jogos-rodada", modalEditarPlacar.rodada_id] });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível salvar o placar e calcular pontos");
+    }
   };
 
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-brasil">
             <Settings className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
             <h1 className="text-3xl font-bold">Painel Administrativo</h1>
-            <p className="text-muted-foreground">Rodadas, jogos e resultados</p>
+            <p className="text-muted-foreground">Gerencie rodadas e jogos do campeonato</p>
           </div>
         </div>
 
-        <Tabs defaultValue="rodadas" className="space-y-6">
-          <TabsList className="grid w-full max-w-xl grid-cols-2">
-            <TabsTrigger value="rodadas">Rodadas & Jogos</TabsTrigger>
-            <TabsTrigger value="resultados">Inserir Resultados</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="rodadas" className="space-y-4">
-            <Card className="shadow-card">
+        {/* Layout Master-Detail */}
+        <div className="flex gap-6 h-[calc(100vh-200px)]">
+          {/* Sidebar de Rodadas */}
+          <div className="w-80 flex-shrink-0">
+            <Card className="shadow-card h-full flex flex-col">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Edit3 className="h-5 w-5" />
-                  Gerenciar Rodadas
+                  <Calendar className="h-5 w-5" />
+                  Rodadas
                 </CardTitle>
-                <CardDescription>Edite a rodada e seus jogos em uma única tela</CardDescription>
+                <CardDescription>Selecione uma rodada para gerenciar</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-                  <div className="space-y-3">
-                    <Button variant="outline" className="w-full" onClick={handleNovaRodada}>
-                      <Plus className="mr-2 h-4 w-4" /> Nova Rodada
-                    </Button>
-                    <div className="flex flex-col gap-2">
-                      {loadingRodadas && <div className="text-sm text-muted-foreground">Carregando...</div>}
-                      {!loadingRodadas && (!rodadas || rodadas.length === 0) && (
-                        <div className="text-sm text-muted-foreground">Nenhuma rodada cadastrada</div>
-                      )}
-                      {rodadas?.map((rodada) => (
-                        <Button
-                          key={rodada.id}
-                          variant={selectedRodadaId === rodada.id ? "default" : "ghost"}
-                          className="w-full justify-between"
-                          onClick={() => setSelectedRodadaId(rodada.id)}
-                        >
-                          <span>Rodada {rodada.numero}</span>
-                          <Badge variant="secondary" className="ml-2 text-xs capitalize">
-                            {rodada.status || "aguardando"}
-                          </Badge>
-                        </Button>
-                      ))}
+              <CardContent className="flex-1 flex flex-col gap-3 overflow-hidden">
+                <Button
+                  className="w-full"
+                  onClick={() => setModalNovaRodada(true)}
+                  disabled={createRodada.isLoading}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova Rodada
+                </Button>
+
+                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                  {loadingRodadas ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <Card className="border-dashed">
-                      <CardHeader>
-                        <CardTitle>Dados da Rodada</CardTitle>
-                        <CardDescription>Defina status e janelas de palpite</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSalvarRodada}>
-                          <div className="space-y-2">
-                            <Label>Número</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              max="38"
-                              value={rodadaForm.numero}
-                              onChange={(e) => setRodadaForm({ ...rodadaForm, numero: e.target.value })}
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Status</Label>
-                            <select
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                              value={rodadaForm.status}
-                              onChange={(e) => setRodadaForm({ ...rodadaForm, status: e.target.value })}
-                            >
-                              <option value="aguardando">Aguardando</option>
-                              <option value="em_andamento">Em andamento</option>
-                              <option value="finalizada">Finalizada</option>
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Data início (abre palpite)</Label>
-                            <Input
-                              type="datetime-local"
-                              value={rodadaForm.data_inicio}
-                              onChange={(e) => setRodadaForm({ ...rodadaForm, data_inicio: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Data fechamento (encerra palpite)</Label>
-                            <Input
-                              type="datetime-local"
-                              value={rodadaForm.data_fechamento}
-                              onChange={(e) => setRodadaForm({ ...rodadaForm, data_fechamento: e.target.value })}
-                            />
-                          </div>
-                          <div className="md:col-span-2 flex justify-end">
-                            <Button type="submit" disabled={createRodada.isLoading || updateRodada.isLoading}>
-                              <Save className="mr-2 h-4 w-4" />
-                              {createRodada.isLoading || updateRodada.isLoading ? "Salvando..." : "Salvar rodada"}
-                            </Button>
-                          </div>
-                        </form>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="shadow-card">
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle>Jogos da Rodada</CardTitle>
-                            <CardDescription>Cadastre, edite ou remova jogos vinculados</CardDescription>
-                          </div>
-                          {selectedRodada && selectedRodadaId !== "new" && (
-                            <Badge variant="outline">Rodada {selectedRodada.numero}</Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <form className="grid gap-3 md:grid-cols-[1fr_1fr_auto] items-end" onSubmit={handleAdicionarJogo}>
-                          <div className="space-y-2">
-                            <Label>Mandante</Label>
-                            <Select
-                              value={novoJogo.mandante}
-                              onValueChange={(value) => setNovoJogo({ ...novoJogo, mandante: value })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TIMES.filter((t) => t.slug !== novoJogo.visitante).map((team) => (
-                                  <SelectItem key={team.slug} value={team.slug}>
-                                    <div className="flex items-center gap-2">
-                                      <img
-                                        src={`${URL_ESCUDOS}${team.slug}`}
-                                        alt={team.name}
-                                        className="h-5 w-5 rounded-full object-contain"
-                                        loading="lazy"
-                                      />
-                                      <span>{team.name}</span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Visitante</Label>
-                            <Select
-                              value={novoJogo.visitante}
-                              onValueChange={(value) => setNovoJogo({ ...novoJogo, visitante: value })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TIMES.filter((t) => t.slug !== novoJogo.mandante).map((team) => (
-                                  <SelectItem key={team.slug} value={team.slug}>
-                                    <div className="flex items-center gap-2">
-                                      <img
-                                        src={`${URL_ESCUDOS}${team.slug}`}
-                                        alt={team.name}
-                                        className="h-5 w-5 rounded-full object-contain"
-                                        loading="lazy"
-                                      />
-                                      <span>{team.name}</span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <Button type="submit" disabled={createJogo.isLoading}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            {createJogo.isLoading ? "Salvando..." : "Adicionar jogo"}
-                          </Button>
-                        </form>
-
-                        {loadingJogosRodada ? (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Carregando jogos...
-                          </div>
-                        ) : !jogosRodada || jogosRodada.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">Nenhum jogo cadastrado nesta rodada.</div>
-                        ) : (
-                          <div className="space-y-3">
-                            {jogosRodada.map((jogo) => {
-                              const edit = jogoEdits[jogo.id] || {
-                                mandante: jogo.logo_casa || "",
-                                visitante: jogo.logo_visitante || "",
-                                status: jogo.status || "agendado",
-                              };
-
-                              return (
-                                <div key={jogo.id} className="rounded-lg border p-4 space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      {jogo.logo_casa && (
-                                        <img
-                                          src={`${URL_ESCUDOS}${jogo.logo_casa}`}
-                                          alt={jogo.time_casa}
-                                          className="h-8 w-8 object-contain"
-                                        />
-                                      )}
-                                      <div className="font-semibold">{jogo.time_casa}</div>
-                                      <span className="text-muted-foreground">x</span>
-                                      <div className="font-semibold">{jogo.time_visitante}</div>
-                                      {jogo.logo_visitante && (
-                                        <img
-                                          src={`${URL_ESCUDOS}${jogo.logo_visitante}`}
-                                          alt={jogo.time_visitante}
-                                          className="h-8 w-8 object-contain"
-                                        />
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="capitalize">{jogo.status || "agendado"}</Badge>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-destructive"
-                                        onClick={() => handleExcluirJogo(jogo.id)}
-                                        disabled={deleteJogo.isLoading}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid gap-3 md:grid-cols-3">
-                                    <Select
-                                      value={edit.mandante}
-                                      onValueChange={(value) =>
-                                        setJogoEdits((prev) => ({
-                                          ...prev,
-                                          [jogo.id]: { ...edit, mandante: value },
-                                        }))
-                                      }
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Mandante" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {TIMES.map((team) => (
-                                          <SelectItem key={team.slug} value={team.slug}>
-                                            <div className="flex items-center gap-2">
-                                              <img
-                                                src={`${URL_ESCUDOS}${team.slug}`}
-                                                alt={team.name}
-                                                className="h-5 w-5 rounded-full object-contain"
-                                              />
-                                              <span>{team.name}</span>
-                                            </div>
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-
-                                    <Select
-                                      value={edit.visitante}
-                                      onValueChange={(value) =>
-                                        setJogoEdits((prev) => ({
-                                          ...prev,
-                                          [jogo.id]: { ...edit, visitante: value },
-                                        }))
-                                      }
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Visitante" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {TIMES.map((team) => (
-                                          <SelectItem key={team.slug} value={team.slug}>
-                                            <div className="flex items-center gap-2">
-                                              <img
-                                                src={`${URL_ESCUDOS}${team.slug}`}
-                                                alt={team.name}
-                                                className="h-5 w-5 rounded-full object-contain"
-                                              />
-                                              <span>{team.name}</span>
-                                            </div>
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-
-                                    <select
-                                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                      value={edit.status}
-                                      onChange={(e) =>
-                                        setJogoEdits((prev) => ({
-                                          ...prev,
-                                          [jogo.id]: { ...edit, status: e.target.value },
-                                        }))
-                                      }
-                                    >
-                                      <option value="agendado">Agendado</option>
-                                      <option value="ao_vivo">Ao vivo</option>
-                                      <option value="finalizado">Finalizado</option>
-                                      <option value="cancelado">Cancelado</option>
-                                    </select>
-                                  </div>
-
-                                  <div className="flex justify-end">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleAtualizarJogo(jogo)}
-                                      disabled={updateJogo.isLoading}
-                                    >
-                                      {updateJogo.isLoading ? "Salvando..." : "Salvar alterações"}
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+                  ) : errorRodadas ? (
+                    <div className="text-sm text-destructive py-8 text-center">
+                      Erro ao carregar rodadas
+                    </div>
+                  ) : !rodadas || rodadas.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-8 text-center">
+                      <p className="mb-2">Nenhuma rodada cadastrada</p>
+                      <p className="text-xs">Clique em "Nova Rodada" para começar</p>
+                    </div>
+                  ) : (
+                    rodadas.map((rodada) => (
+                      <Button
+                        key={rodada.id}
+                        variant={selectedRodadaId === rodada.id ? "default" : "ghost"}
+                        className="w-full justify-between h-auto py-3"
+                        onClick={() => setSelectedRodadaId(rodada.id)}
+                      >
+                        <span className="font-semibold">Rodada {rodada.numero}</span>
+                        <Badge
+                          variant={getStatusBadgeVariant(rodada.status)}
+                          className="ml-2 text-xs capitalize"
+                        >
+                          {rodada.status || "aguardando"}
+                        </Badge>
+                      </Button>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
 
-          <TabsContent value="resultados" className="space-y-4">
-            <Card className="shadow-card">
+          {/* Área Principal */}
+          <div className="flex-1 min-w-0">
+            <Card className="shadow-card h-full flex flex-col">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Save className="h-5 w-5" />
-                  Inserir resultados por rodada
-                </CardTitle>
-                <CardDescription>Escolha a rodada e salve os placares em massa</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-[260px_1fr] md:items-end">
-                  <div className="space-y-2">
-                    <Label>Rodada</Label>
-                    <Select
-                      value={rodadaResultadosId || ""}
-                      onValueChange={(value) => setRodadaResultadosId(value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {rodadas?.map((rodada) => (
-                          <SelectItem key={rodada.id} value={rodada.id}>
-                            Rodada {rodada.numero}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Selecione a rodada para carregar os jogos e lançar os resultados.
-                  </div>
-                </div>
-
-                {loadingResultados ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando jogos...
-                  </div>
-                ) : !jogosResultados || jogosResultados.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Nenhum jogo encontrado para a rodada selecionada.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {jogosResultados.map((jogo) => {
-                      const edit = resultadoEdits[jogo.id] || {
-                        placarCasa: jogo.placar_casa?.toString() || "",
-                        placarVisitante: jogo.placar_visitante?.toString() || "",
-                      };
-
-                      return (
-                        <div
-                          key={jogo.id}
-                          className="rounded-lg border p-4 grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_140px] items-center"
-                        >
-                          <div className="flex items-center gap-2">
-                            {jogo.logo_casa && (
-                              <img
-                                src={`${URL_ESCUDOS}${jogo.logo_casa}`}
-                                alt={jogo.time_casa}
-                                className="h-7 w-7 object-contain"
-                              />
-                            )}
-                            <div className="font-semibold">{jogo.time_casa}</div>
-                          </div>
-
-                          <div className="text-center text-muted-foreground font-medium">x</div>
-
-                          <div className="flex items-center gap-2">
-                            {jogo.logo_visitante && (
-                              <img
-                                src={`${URL_ESCUDOS}${jogo.logo_visitante}`}
-                                alt={jogo.time_visitante}
-                                className="h-7 w-7 object-contain"
-                              />
-                            )}
-                            <div className="font-semibold">{jogo.time_visitante}</div>
-                          </div>
-
-                          <div className="flex items-center gap-2 justify-end">
-                            <Input
-                              type="number"
-                              min="0"
-                              className="w-20"
-                              value={edit.placarCasa}
-                              onChange={(e) =>
-                                setResultadoEdits((prev) => ({
-                                  ...prev,
-                                  [jogo.id]: { ...edit, placarCasa: e.target.value },
-                                }))
-                              }
-                            />
-                            <span className="text-muted-foreground">x</span>
-                            <Input
-                              type="number"
-                              min="0"
-                              className="w-20"
-                              value={edit.placarVisitante}
-                              onChange={(e) =>
-                                setResultadoEdits((prev) => ({
-                                  ...prev,
-                                  [jogo.id]: { ...edit, placarVisitante: e.target.value },
-                                }))
-                              }
-                            />
-                          </div>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSalvarResultado(jogo)}
-                            disabled={updateJogo.isLoading}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      {selectedRodada ? (
+                        <>
+                          Rodada {selectedRodada.numero}
+                          <Badge
+                            variant={getStatusBadgeVariant(selectedRodada.status)}
+                            className="capitalize"
                           >
-                            {updateJogo.isLoading ? "Salvando..." : "Salvar placar"}
-                          </Button>
-                        </div>
-                      );
-                    })}
+                            {selectedRodada.status}
+                          </Badge>
+                        </>
+                      ) : (
+                        "Selecione uma rodada"
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      {selectedRodada
+                        ? "Gerencie os jogos desta rodada"
+                        : "Escolha uma rodada na sidebar para começar"}
+                    </CardDescription>
+                  </div>
+                  {selectedRodada && (
+                    <Button
+                      onClick={() => setModalAdicionarJogo(true)}
+                      disabled={createJogo.isLoading}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar Jogo
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto">
+                {!selectedRodada ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                    <Calendar className="h-16 w-16 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Nenhuma rodada selecionada</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Selecione uma rodada na sidebar ou crie uma nova
+                    </p>
+                    <Button onClick={() => setModalNovaRodada(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Criar Nova Rodada
+                    </Button>
+                  </div>
+                ) : loadingJogosRodada ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <span className="ml-3 text-muted-foreground">Carregando jogos...</span>
+                  </div>
+                ) : errorJogos ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <p className="text-destructive mb-2">Erro ao carregar jogos</p>
+                    <p className="text-sm text-muted-foreground">
+                      {errorJogos instanceof Error ? errorJogos.message : "Tente novamente mais tarde"}
+                    </p>
+                  </div>
+                ) : !jogosRodada || jogosRodada.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                    <Clock className="h-16 w-16 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Nenhum jogo cadastrado</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Esta rodada ainda não possui jogos cadastrados
+                    </p>
+                    <Button onClick={() => setModalAdicionarJogo(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar Primeiro Jogo
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {jogosRodada.map((jogo) => (
+                      <Card key={jogo.id} className="shadow-sm">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4 flex-1">
+                              {/* Time Casa */}
+                              <div className="flex items-center gap-2">
+                                {jogo.logo_casa && (
+                                  <img
+                                    src={`${URL_ESCUDOS}${jogo.logo_casa}`}
+                                    alt={jogo.time_casa}
+                                    className="h-10 w-10 object-contain"
+                                    loading="lazy"
+                                  />
+                                )}
+                                <span className="font-semibold">{jogo.time_casa}</span>
+                              </div>
+
+                              <span className="text-muted-foreground font-medium">x</span>
+
+                              {/* Time Visitante */}
+                              <div className="flex items-center gap-2">
+                                {jogo.logo_visitante && (
+                                  <img
+                                    src={`${URL_ESCUDOS}${jogo.logo_visitante}`}
+                                    alt={jogo.time_visitante}
+                                    className="h-10 w-10 object-contain"
+                                    loading="lazy"
+                                  />
+                                )}
+                                <span className="font-semibold">{jogo.time_visitante}</span>
+                              </div>
+
+                              {/* Data do Jogo */}
+                              <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="h-4 w-4" />
+                                {jogo.data_jogo instanceof Date 
+                                  ? jogo.data_jogo.toLocaleString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : new Date(jogo.data_jogo).toLocaleString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 ml-4">
+                              <Badge
+                                variant={getGameStatusBadgeVariant(jogo.status)}
+                                className="capitalize"
+                              >
+                                {jogo.status}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setModalEditarPlacar(jogo)}
+                                title="Editar Placar"
+                              >
+                                <Trophy className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setModalEditarJogo(jogo)}
+                                title="Editar Jogo"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Placar (se finalizado) */}
+                          {jogo.status === "finalizado" && (
+                            <div className="mt-3 pt-3 border-t flex items-center justify-center gap-2">
+                              <span className="text-2xl font-bold">{jogo.placar_casa ?? 0}</span>
+                              <span className="text-muted-foreground">x</span>
+                              <span className="text-2xl font-bold">{jogo.placar_visitante ?? 0}</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
+
+        {/* Modal Nova Rodada */}
+        <Dialog open={modalNovaRodada} onOpenChange={setModalNovaRodada}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nova Rodada</DialogTitle>
+              <DialogDescription>
+                Crie uma nova rodada do campeonato. Defina o número, status e datas.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCriarRodada}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="numero">Número da Rodada *</Label>
+                  <Input
+                    id="numero"
+                    type="number"
+                    min="1"
+                    max="38"
+                    value={rodadaForm.numero}
+                    onChange={(e) => setRodadaForm({ ...rodadaForm, numero: e.target.value })}
+                    required
+                    placeholder="Ex: 1"
+                  />
+                  <p className="text-xs text-muted-foreground">Número entre 1 e 38</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={rodadaForm.status}
+                    onValueChange={(value) => setRodadaForm({ ...rodadaForm, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="aguardando">Aguardando</SelectItem>
+                      <SelectItem value="em_andamento">Em andamento</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="data_inicio">Data de Início (abre palpite)</Label>
+                  <Input
+                    id="data_inicio"
+                    type="datetime-local"
+                    value={rodadaForm.data_inicio}
+                    onChange={(e) => setRodadaForm({ ...rodadaForm, data_inicio: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="data_fechamento">Data de Fechamento (encerra palpite)</Label>
+                  <Input
+                    id="data_fechamento"
+                    type="datetime-local"
+                    value={rodadaForm.data_fechamento}
+                    onChange={(e) => setRodadaForm({ ...rodadaForm, data_fechamento: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalNovaRodada(false)}
+                  disabled={createRodada.isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={createRodada.isLoading}>
+                  {createRodada.isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Criando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Criar Rodada
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Adicionar Jogo */}
+        <Dialog open={modalAdicionarJogo} onOpenChange={setModalAdicionarJogo}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adicionar Jogo</DialogTitle>
+              <DialogDescription>
+                Adicione um novo jogo à rodada {selectedRodada?.numero}.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAdicionarJogo}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="time_casa">Time Mandante *</Label>
+                  <Select
+                    value={novoJogoForm.time_casa}
+                    onValueChange={(value) =>
+                      setNovoJogoForm({ ...novoJogoForm, time_casa: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o time mandante" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMES.filter((t) => t.slug !== novoJogoForm.time_visitante).map((team) => (
+                        <SelectItem key={team.slug} value={team.slug}>
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={`${URL_ESCUDOS}${team.slug}`}
+                              alt={team.name}
+                              className="h-5 w-5 rounded-full object-contain"
+                              loading="lazy"
+                            />
+                            <span>{team.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="time_visitante">Time Visitante *</Label>
+                  <Select
+                    value={novoJogoForm.time_visitante}
+                    onValueChange={(value) =>
+                      setNovoJogoForm({ ...novoJogoForm, time_visitante: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o time visitante" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMES.filter((t) => t.slug !== novoJogoForm.time_casa).map((team) => (
+                        <SelectItem key={team.slug} value={team.slug}>
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={`${URL_ESCUDOS}${team.slug}`}
+                              alt={team.name}
+                              className="h-5 w-5 rounded-full object-contain"
+                              loading="lazy"
+                            />
+                            <span>{team.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="data_jogo">Data e Hora do Jogo</Label>
+                  <Input
+                    id="data_jogo"
+                    type="datetime-local"
+                    value={novoJogoForm.data_jogo}
+                    onChange={(e) =>
+                      setNovoJogoForm({ ...novoJogoForm, data_jogo: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Se não informado, usará a data de início da rodada
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalAdicionarJogo(false)}
+                  disabled={createJogo.isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={createJogo.isLoading}>
+                  {createJogo.isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adicionando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar Jogo
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Editar Placar */}
+        <Dialog open={!!modalEditarPlacar} onOpenChange={(open) => !open && setModalEditarPlacar(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Placar e Calcular Pontos</DialogTitle>
+              <DialogDescription>
+                {modalEditarPlacar && (
+                  <>
+                    Informe o placar final do jogo entre{" "}
+                    <strong>{modalEditarPlacar.time_casa}</strong> x{" "}
+                    <strong>{modalEditarPlacar.time_visitante}</strong>. Os pontos dos palpites serão calculados automaticamente.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSalvarPlacarECalcular}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="placar_casa">
+                    Placar {modalEditarPlacar?.time_casa} *
+                  </Label>
+                  <Input
+                    id="placar_casa"
+                    type="number"
+                    min="0"
+                    value={editarPlacarForm.placar_casa}
+                    onChange={(e) =>
+                      setEditarPlacarForm({ ...editarPlacarForm, placar_casa: e.target.value })
+                    }
+                    required
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="placar_visitante">
+                    Placar {modalEditarPlacar?.time_visitante} *
+                  </Label>
+                  <Input
+                    id="placar_visitante"
+                    type="number"
+                    min="0"
+                    value={editarPlacarForm.placar_visitante}
+                    onChange={(e) =>
+                      setEditarPlacarForm({ ...editarPlacarForm, placar_visitante: e.target.value })
+                    }
+                    required
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalEditarPlacar(null)}
+                  disabled={finalizarJogoECalcular.isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={finalizarJogoECalcular.isLoading}>
+                  {finalizarJogoECalcular.isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Calculando...
+                    </>
+                  ) : (
+                    <>
+                      <Trophy className="mr-2 h-4 w-4" />
+                      Salvar Placar e Calcular
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Editar Jogo */}
+        <Dialog open={!!modalEditarJogo} onOpenChange={(open) => !open && setModalEditarJogo(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Jogo</DialogTitle>
+              <DialogDescription>
+                Edite as informações do jogo ou remova-o.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditarJogo}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_time_casa">Time Mandante *</Label>
+                  <Select
+                    value={editarJogoForm.time_casa}
+                    onValueChange={(value) =>
+                      setEditarJogoForm({ ...editarJogoForm, time_casa: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o time mandante" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMES.filter((t) => t.slug !== editarJogoForm.time_visitante).map((team) => (
+                        <SelectItem key={team.slug} value={team.slug}>
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={`${URL_ESCUDOS}${team.slug}`}
+                              alt={team.name}
+                              className="h-5 w-5 rounded-full object-contain"
+                              loading="lazy"
+                            />
+                            <span>{team.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_time_visitante">Time Visitante *</Label>
+                  <Select
+                    value={editarJogoForm.time_visitante}
+                    onValueChange={(value) =>
+                      setEditarJogoForm({ ...editarJogoForm, time_visitante: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o time visitante" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMES.filter((t) => t.slug !== editarJogoForm.time_casa).map((team) => (
+                        <SelectItem key={team.slug} value={team.slug}>
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={`${URL_ESCUDOS}${team.slug}`}
+                              alt={team.name}
+                              className="h-5 w-5 rounded-full object-contain"
+                              loading="lazy"
+                            />
+                            <span>{team.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_data_jogo">Data e Hora do Jogo</Label>
+                  <Input
+                    id="edit_data_jogo"
+                    type="datetime-local"
+                    value={editarJogoForm.data_jogo}
+                    onChange={(e) =>
+                      setEditarJogoForm({ ...editarJogoForm, data_jogo: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_status">Status</Label>
+                  <Select
+                    value={editarJogoForm.status}
+                    onValueChange={(value) =>
+                      setEditarJogoForm({ ...editarJogoForm, status: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="agendado">Agendado</SelectItem>
+                      <SelectItem value="ao_vivo">Ao vivo</SelectItem>
+                      <SelectItem value="finalizado">Finalizado</SelectItem>
+                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter className="flex justify-between">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDeletarJogo}
+                  disabled={deleteJogo.isLoading}
+                >
+                  {deleteJogo.isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Removendo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Remover Jogo
+                    </>
+                  )}
+                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setModalEditarJogo(null)}
+                    disabled={updateJogo.isLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={updateJogo.isLoading}>
+                    {updateJogo.isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Salvar Alterações
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

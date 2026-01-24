@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Função helper para verificar se o usuário é admin
+    function isAdmin() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Função helper para verificar se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Coleção: profiles
+    // Perfis: leitura pública; usuário só cria/atualiza o próprio
+    match /profiles/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+    
+    // Coleção: user_roles
+    // Roles: leitura só para autenticados; escrita só via console/backend
+    match /user_roles/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Apenas via console ou backend
+    }
+    
+    // Coleção: rodadas
+    // Rodadas: leitura pública; escrita só admin
+    match /rodadas/{rodadaId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Coleção: jogos
+    // Jogos: leitura pública; escrita só admin
+    match /jogos/{jogoId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Coleção: palpites
+    // Palpites: leitura pública; usuário só cria/edita o próprio
+    match /palpites/{palpiteId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+                       request.resource.data.usuario_id == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       resource.data.usuario_id == request.auth.uid;
+      allow delete: if false;
+    }
+  }
+}

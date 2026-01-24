@@ -192,51 +192,87 @@ palpites/{palpiteId}
 
 ### 9. Regras de Segurança do Firestore
 
-No Firebase Console, vá em Firestore Database → Rules e configure:
+#### Arquivo de Referência
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // Profiles - usuários podem ler todos, mas só editar o próprio
-    match /profiles/{userId} {
-      allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow delete: if false;
-    }
-    
-    // User roles - apenas leitura para autenticados
-    match /user_roles/{userId} {
-      allow read: if request.auth != null;
-      allow write: if false; // Apenas admins via backend
-    }
-    
-    // Rodadas - todos podem ler, apenas admins podem escrever
-    match /rodadas/{rodadaId} {
-      allow read: if true;
-      allow write: if request.auth != null && 
-                     get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data.role == 'admin';
-    }
-    
-    // Jogos - todos podem ler, apenas admins podem escrever
-    match /jogos/{jogoId} {
-      allow read: if true;
-      allow write: if request.auth != null && 
-                     get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data.role == 'admin';
-    }
-    
-    // Palpites - usuários podem criar/editar apenas os próprios, todos podem ler
-    match /palpites/{palpiteId} {
-      allow read: if true;
-      allow create: if request.auth != null && request.resource.data.usuario_id == request.auth.uid;
-      allow update: if request.auth != null && resource.data.usuario_id == request.auth.uid;
-      allow delete: if false;
-    }
-  }
-}
-```
+As regras completas e melhoradas do Firestore estão disponíveis no arquivo `firestore.rules` na raiz do projeto. Este arquivo contém:
+
+- Funções helper para verificação de admin e autenticação
+- Tratamento seguro de documentos ausentes usando `exists()`
+- Permissões explícitas para todas as coleções
+- Proteção contra erros com fallbacks adequados
+
+#### Como Aplicar as Regras no Firebase Console
+
+Siga estes passos para aplicar as regras de segurança no Firebase:
+
+1. **Acesse o Firebase Console**
+   - Vá para [Firebase Console](https://console.firebase.google.com/)
+   - Selecione seu projeto
+
+2. **Navegue até as Regras do Firestore**
+   - No menu lateral esquerdo, clique em **"Firestore Database"**
+   - Clique na aba **"Regras"** (Rules) no topo da página
+
+3. **Copie as Regras**
+   - Abra o arquivo `firestore.rules` do projeto
+   - Selecione todo o conteúdo (Ctrl+A / Cmd+A)
+   - Copie o conteúdo (Ctrl+C / Cmd+C)
+
+4. **Cole no Editor de Regras**
+   - No Firebase Console, você verá um editor de texto
+   - Selecione todo o conteúdo existente e substitua pelo conteúdo copiado
+   - Ou simplesmente cole o novo conteúdo sobre o antigo
+
+5. **Publicar as Regras**
+   - Clique no botão **"Publicar"** (Publish) no topo direito do editor
+   - Aguarde alguns segundos para as regras serem aplicadas
+   - Você verá uma mensagem de confirmação quando a publicação for concluída
+
+6. **Verificar a Aplicação**
+   - As regras são aplicadas imediatamente após a publicação
+   - Teste a aplicação para garantir que tudo está funcionando corretamente
+   - Verifique o console do navegador para possíveis erros de permissão
+
+#### Melhorias Implementadas nas Regras
+
+As regras melhoradas incluem:
+
+- **Função `isAdmin()`**: Centraliza a lógica de verificação de admin com tratamento seguro usando `exists()`
+- **Função `isAuthenticated()`**: Helper para verificar autenticação
+- **Permissões explícitas**: `read` cobre tanto `get` quanto `list`, garantindo que queries funcionem
+- **Separação de operações**: `create`, `update` e `delete` separados para maior clareza
+- **Proteção contra erros**: `exists()` verifica se o documento existe antes de acessar dados
+
+#### Verificação Adicional de Índices
+
+Após aplicar as regras, certifique-se de que os seguintes índices compostos existem no Firestore:
+
+1. **Coleção `jogos`**:
+   - Campo 1: `rodada_id` (Ascending)
+   - Campo 2: `data_jogo` (Ascending)
+
+2. **Coleção `jogos`**:
+   - Campo 1: `status` (Ascending)
+   - Campo 2: `data_jogo` (Ascending)
+
+3. **Coleção `rodadas`**:
+   - Campo 1: `status` (Array-contains-any)
+   - Campo 2: `numero` (Descending)
+
+**Como criar índices**:
+- Se você receber um erro de índice faltando, o Firebase mostrará um link para criar o índice automaticamente
+- Clique no link e aguarde a criação do índice (pode levar alguns minutos)
+- Ou vá em Firestore Database → Índices → Criar índice
+
+#### Teste das Regras
+
+Após aplicar as regras, teste:
+
+1. **Leitura pública**: Acesse a aplicação sem login e verifique se consegue ver jogos e rodadas
+2. **Autenticação**: Faça login e verifique se consegue criar/editar seu próprio perfil
+3. **Palpites**: Crie um palpite e verifique se aparece corretamente
+4. **Admin**: Como admin, teste se consegue criar/editar jogos e rodadas
+5. **Console do navegador**: Verifique se há erros de permissão ou índice
 
 ### 10. Deploy no Vercel
 

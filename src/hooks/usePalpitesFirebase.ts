@@ -7,7 +7,8 @@ import {
   addDoc,
   updateDoc,
   doc,
-  serverTimestamp 
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Palpite } from '@/types/firebase';
@@ -22,23 +23,12 @@ export const useMeusPalpites = (rodadaId?: string) => {
     queryFn: async (): Promise<Palpite[]> => {
       if (!user || !rodadaId) return [];
 
-      // Primeiro, buscar IDs dos jogos da rodada
-      const jogosRef = collection(db, 'jogos');
-      const jogosQuery = query(
-        jogosRef,
-        where('rodada_id', '==', rodadaId)
-      );
-      const jogosSnapshot = await getDocs(jogosQuery);
-      const jogoIds = jogosSnapshot.docs.map(doc => doc.id);
-
-      if (jogoIds.length === 0) return [];
-
-      // Buscar palpites do usuário para esses jogos
+      // Buscar diretamente por rodada_id e usuario_id (mais eficiente)
       const palpitesRef = collection(db, 'palpites');
       const palpitesQuery = query(
         palpitesRef,
         where('usuario_id', '==', user.uid),
-        where('jogo_id', 'in', jogoIds)
+        where('rodada_id', '==', rodadaId)
       );
 
       const snapshot = await getDocs(palpitesQuery);
@@ -49,9 +39,11 @@ export const useMeusPalpites = (rodadaId?: string) => {
           id: doc.id,
           usuario_id: data.usuario_id,
           jogo_id: data.jogo_id,
+          rodada_id: data.rodada_id || rodadaId,
           palpite_casa: data.palpite_casa,
           palpite_visitante: data.palpite_visitante,
           pontos_obtidos: data.pontos_obtidos,
+          status: data.status || 'pendente',
           created_at: data.created_at?.toDate() || new Date(),
           updated_at: data.updated_at?.toDate() || new Date(),
         } as Palpite;
@@ -70,14 +62,17 @@ export const useSalvarPalpite = () => {
   return useMutation({
     mutationFn: async ({
       jogoId,
+      rodadaId,
       palpiteCasa,
       palpiteVisitante,
     }: {
       jogoId: string;
+      rodadaId: string;
       palpiteCasa: number;
       palpiteVisitante: number;
     }) => {
       if (!user) throw new Error('Usuário não autenticado');
+      if (!rodadaId) throw new Error('Rodada ID é obrigatório');
 
       // Verificar se já existe palpite
       const palpitesRef = collection(db, 'palpites');
@@ -95,6 +90,8 @@ export const useSalvarPalpite = () => {
         await updateDoc(doc(db, 'palpites', palpiteDoc.id), {
           palpite_casa: palpiteCasa,
           palpite_visitante: palpiteVisitante,
+          rodada_id: rodadaId,
+          status: 'pendente',
           updated_at: serverTimestamp(),
         });
         return { id: palpiteDoc.id };
@@ -103,9 +100,11 @@ export const useSalvarPalpite = () => {
         const docRef = await addDoc(collection(db, 'palpites'), {
           usuario_id: user.uid,
           jogo_id: jogoId,
+          rodada_id: rodadaId,
           palpite_casa: palpiteCasa,
           palpite_visitante: palpiteVisitante,
           pontos_obtidos: null,
+          status: 'pendente',
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
         });
@@ -113,6 +112,103 @@ export const useSalvarPalpite = () => {
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['meus-palpites'] });
+    },
+  });
+};
+
+// Mutation para salvar múltiplos palpites em batch
+export const useSalvarPalpitesBatch = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      rodadaId,
+      palpites,
+    }: {
+      rodadaId: string;
+      palpites: Array<{
+        jogoId: string;
+        palpiteCasa: number;
+        palpiteVisitante: number;
+      }>;
+    }) => {
+      if (!user) throw new Error('Usuário não autenticado');
+      if (!rodadaId) throw new Error('Rodada ID é obrigatório');
+      if (!palpites || palpites.length === 0) {
+        throw new Error('Nenhum palpite para salvar');
+      }
+
+      // Buscar todos os palpites existentes do usuário para esta rodada
+      const palpitesRef = collection(db, 'palpites');
+      const q = query(
+        palpitesRef,
+        where('usuario_id', '==', user.uid),
+        where('rodada_id', '==', rodadaId)
+      );
+      const existingSnapshot = await getDocs(q);
+      
+      // Criar mapa de palpites existentes por jogo_id
+      const palpitesExistentes = new Map<string, string>();
+      existingSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        palpitesExistentes.set(data.jogo_id, doc.id);
+      });
+
+      // Preparar batch de operações
+      let batch = writeBatch(db);
+      let operacoes = 0;
+      const BATCH_LIMIT = 500; // Limite do Firestore
+
+      for (const palpite of palpites) {
+        const palpiteIdExistente = palpitesExistentes.get(palpite.jogoId);
+        
+        if (palpiteIdExistente) {
+          // Atualizar palpite existente
+          const palpiteRef = doc(db, 'palpites', palpiteIdExistente);
+          batch.update(palpiteRef, {
+            palpite_casa: palpite.palpiteCasa,
+            palpite_visitante: palpite.palpiteVisitante,
+            rodada_id: rodadaId,
+            status: 'pendente',
+            updated_at: serverTimestamp(),
+          });
+        } else {
+          // Criar novo palpite
+          const palpiteRef = doc(collection(db, 'palpites'));
+          batch.set(palpiteRef, {
+            usuario_id: user.uid,
+            jogo_id: palpite.jogoId,
+            rodada_id: rodadaId,
+            palpite_casa: palpite.palpiteCasa,
+            palpite_visitante: palpite.palpiteVisitante,
+            pontos_obtidos: null,
+            status: 'pendente',
+            created_at: serverTimestamp(),
+            updated_at: serverTimestamp(),
+          });
+        }
+        
+        operacoes++;
+        
+        // Se atingir o limite, commitar e criar novo batch
+        if (operacoes >= BATCH_LIMIT) {
+          await batch.commit();
+          batch = writeBatch(db); // Criar novo batch
+          operacoes = 0;
+        }
+      }
+
+      // Commitar batch final se houver operações pendentes
+      if (operacoes > 0) {
+        await batch.commit();
+      }
+
+      return { salvos: palpites.length };
+    },
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['meus-palpites', user?.uid, variables.rodadaId] });
       queryClient.invalidateQueries({ queryKey: ['meus-palpites'] });
     },
   });
