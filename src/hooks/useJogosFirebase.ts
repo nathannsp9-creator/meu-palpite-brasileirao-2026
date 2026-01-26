@@ -27,22 +27,22 @@ export const useRodadaAtual = () => {
         
         const rodasRef = collection(db, 'rodadas');
         
-        // Primeiro, tentar buscar por status 'em_andamento' (minúsculo)
+        // Primeiro, tentar buscar por status 'aguardando' (palpites abertos)
         let q = query(
           rodasRef,
-          where('status', '==', 'em_andamento'),
+          where('status', '==', 'aguardando'),
           orderBy('numero', 'desc'),
           limit(1)
         );
 
         let snapshot = await getDocs(q);
         
-        // Se não encontrar, tentar buscar por 'aguardando'
+        // Se não encontrar, tentar buscar por 'em_andamento'
         if (snapshot.empty) {
-          console.log('[useRodadaAtual] Nenhuma rodada com status "em_andamento", tentando "aguardando"...');
+          console.log('[useRodadaAtual] Nenhuma rodada com status "aguardando", tentando "em_andamento"...');
           q = query(
             rodasRef,
-            where('status', '==', 'aguardando'),
+            where('status', '==', 'em_andamento'),
             orderBy('numero', 'desc'),
             limit(1)
           );

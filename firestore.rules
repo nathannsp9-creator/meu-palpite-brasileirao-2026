@@ -2,77 +2,79 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Função helper para verificar se o usuário é admin
+    // --- FUNÇÕES HELPER ---
+
+    // Verifica se o usuário é admin
     function isAdmin() {
       return request.auth != null && 
              exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data.role == 'admin';
     }
     
-    // Função helper para verificar se o usuário está autenticado
+    // Verifica apenas se está logado
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Função helper para verificar se a rodada está aberta para palpites
+    // Verifica se a rodada aceita palpites
+    // CORREÇÃO: Status alterado para 'em_andamento' para coincidir com a lógica do seu app
     function isRodadaAberta(rodadaId) {
       let rodada = get(/databases/$(database)/documents/rodadas/$(rodadaId));
-      return rodada.data.status == 'aguardando' && 
+      return rodada.data.status == 'em_andamento' && 
              rodada.data.data_fechamento > request.time;
     }
+
+    // Verifica se o Jogo (jogoId) realmente faz parte da Rodada (rodadaId) informada
+    function jogoPertenceARodada(jogoId, rodadaId) {
+       return get(/databases/$(database)/documents/jogos/$(jogoId)).data.rodada_id == rodadaId;
+    }
     
-    // Coleção: profiles
-    // Perfis: leitura pública; usuário só cria/atualiza o próprio
+    // --- REGRAS DAS COLEÇÕES ---
+
     match /profiles/{userId} {
       allow read: if true;
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow create, update: if isAuthenticated() && request.auth.uid == userId;
       allow delete: if false;
     }
     
-    // Coleção: user_roles
-    // Roles: leitura só para autenticados; escrita só via console/backend
     match /user_roles/{userId} {
       allow read: if isAuthenticated();
-      allow write: if false; // Apenas via console ou backend
+      allow write: if false;
     }
     
-    // Coleção: rodadas
-    // Rodadas: leitura pública; escrita só admin
     match /rodadas/{rodadaId} {
       allow read: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow write: if isAdmin();
     }
     
-    // Coleção: jogos
-    // Jogos: leitura pública; escrita só admin
     match /jogos/{jogoId} {
       allow read: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow write: if isAdmin();
     }
     
-    // Coleção: palpites
-    // Palpites: leitura pública; usuário só cria/edita o próprio; admin pode atualizar (para cálculo de pontos)
-    // Palpites só podem ser criados/editados se:
-    // 1. A rodada estiver com status 'em_andamento'
-    // 2. A data_fechamento não tiver passado
-    // 3. O jogo pertencer à rodada especificada (isolamento)
+    // Palpites: O coração do app
     match /palpites/{palpiteId} {
       allow read: if true;
-      allow create: if isAuthenticated() && 
+      
+      // CRIAR (CORRIGIDO):
+      // Agora começa com "isAdmin() ||". O Admin consegue criar palpites sempre.
+      // Usuários comuns precisam respeitar as regras de rodada aberta.
+      allow create: if isAdmin() || (
+                       isAuthenticated() && 
                        request.resource.data.usuario_id == request.auth.uid &&
-                       jogoPertenteARodada(request.resource.data.jogo_id, request.resource.data.rodada_id) &&
-                       isRodadaAberta(request.resource.data.rodada_id);
+                       jogoPertenceARodada(request.resource.data.jogo_id, request.resource.data.rodada_id) &&
+                       isRodadaAberta(request.resource.data.rodada_id)
+                    );
+
+      // ATUALIZAR:
+      // Admin edita sempre; Usuário edita o próprio se a rodada estiver aberta.
       allow update: if isAdmin() || 
                        (isAuthenticated() && 
                         resource.data.usuario_id == request.auth.uid &&
-                        jogoPertenteARodada(resource.data.jogo_id, resource.data.rodada_id) &&
+                        jogoPertenceARodada(resource.data.jogo_id, resource.data.rodada_id) &&
                         isRodadaAberta(resource.data.rodada_id));
-      allow delete: if false;
+                        
+      allow delete: if isAdmin();
     }
   }
 }

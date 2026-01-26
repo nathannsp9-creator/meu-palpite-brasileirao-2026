@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target, History } from "lucide-react";
 import { toast } from "sonner";
-import { useRodadaAtual, useProximosJogos, calcularPontos } from "@/hooks/useJogosFirebase";
+import { useRodadaAtual, useRodadas, useJogosPorRodada, calcularPontos } from "@/hooks/useJogosFirebase";
 import { useMeusPalpites, useSalvarPalpitesBatch } from "@/hooks/usePalpitesFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
 import { URL_ESCUDOS } from "@/constants/urls";
@@ -47,20 +48,35 @@ export default function Palpites() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [palpites, setPalpites] = useState<Record<string, PalpiteLocal>>({});
+  const [rodadaSelecionadaId, setRodadaSelecionadaId] = useState<string | null>(null);
 
   const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
-  const { data: proximosJogos, isLoading: loadingJogos } = useProximosJogos();
-  const { data: meusPalpites } = useMeusPalpites(rodadaAtual?.id);
+  const { data: todasRodadas, isLoading: loadingTodasRodadas } = useRodadas();
+  const { data: jogosDaRodada, isLoading: loadingJogosDaRodada } = useJogosPorRodada(rodadaSelecionadaId || undefined);
+  const { data: meusPalpites } = useMeusPalpites(rodadaSelecionadaId || undefined);
   const salvarPalpitesBatch = useSalvarPalpitesBatch();
 
-  const jogos = proximosJogos || [];
-  const rodada = rodadaAtual || null;
+  // Ao carregar pela primeira vez, seleciona automaticamente a rodada atual
+  useEffect(() => {
+    if (rodadaAtual && !rodadaSelecionadaId) {
+      setRodadaSelecionadaId(rodadaAtual.id);
+    }
+  }, [rodadaAtual, rodadaSelecionadaId]);
+
+  const rodadaSelecionada = todasRodadas?.find(r => r.id === rodadaSelecionadaId) || null;
+  const jogos = jogosDaRodada || [];
+  const rodada = rodadaSelecionada || null;
+  const isVisualizandoRodadaAtual = rodadaSelecionadaId === rodadaAtual?.id;
   const isExpired = rodada?.data_fechamento ? new Date() > new Date(rodada.data_fechamento) : false;
   const isRodadaFinalizada = rodada?.status === 'finalizada';
   const isRodadaAguardando = rodada?.status === 'aguardando';
+  const isRodadaEmAndamento = rodada?.status === 'em_andamento';
 
   const isJogoDisponivelParaPalpite = (jogo: any): boolean => {
     if (!rodada) return false;
+    
+    // Só permite edição se estiver visualizando a rodada atual
+    if (!isVisualizandoRodadaAtual) return false;
     
     // 1. Jogo deve pertencer à rodada atual (ISOLAMENTO)
     if (jogo.rodada_id !== rodada.id) return false;
@@ -201,20 +217,47 @@ export default function Palpites() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-bold">Fazer Palpites</h1>
             <p className="text-muted-foreground">Rodada {rodada?.numero ?? "-"} - Brasileirão Série A</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              {rodada
-                ? `Fecha em: ${new Date(rodada.data_fechamento || rodada.dataFechamento || "").toLocaleString()}`
-                : "Aguardando rodada"}
-            </Badge>
-            {isExpired && (
-              <Badge variant="destructive">Palpites encerrados</Badge>
-            )}
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            {/* Seletor de Rodada */}
+            <Select value={rodadaSelecionadaId || ""} onValueChange={setRodadaSelecionadaId}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <History className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Selecione a rodada" />
+              </SelectTrigger>
+              <SelectContent>
+                {todasRodadas?.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    Rodada {r.numero} {r.id === rodadaAtual?.id && "(Atual)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <div className="flex flex-wrap gap-2">
+              <Badge 
+                variant={isRodadaEmAndamento ? "default" : isRodadaFinalizada ? "secondary" : "outline"}
+                className="flex items-center gap-2"
+              >
+                {isRodadaFinalizada && "🏁 Finalizada"}
+                {isRodadaEmAndamento && "✅ Em Andamento"}
+                {isRodadaAguardando && "⏳ Aguardando"}
+              </Badge>
+              <Badge variant="outline" className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                {rodada?.data_fechamento
+                  ? new Date(rodada.data_fechamento).toLocaleString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "---"}
+              </Badge>
+            </div>
           </div>
         </div>
 
@@ -268,7 +311,36 @@ export default function Palpites() {
           </CardContent>
         </Card>
 
-        {isExpired && (
+        {/* Alerta de Modo Histórico */}
+        {!isVisualizandoRodadaAtual && (
+          <Card className="border-blue-500/50 bg-blue-500/10">
+            <CardContent className="flex items-start gap-3 pt-6">
+              <History className="h-5 w-5 mt-0.5 text-blue-600" />
+              <div>
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">📜 Modo Histórico</p>
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  Você está visualizando uma rodada passada. Os campos estão em modo leitura.
+                  {isRodadaFinalizada && " Veja abaixo seus palpites e os pontos obtidos!"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Alerta Rodada Aguardando (apenas se visualizando rodada atual) */}
+        {isVisualizandoRodadaAtual && isRodadaAguardando && !isExpired && (
+          <Card className="border-primary/50 bg-primary/10">
+            <CardContent className="flex items-start gap-3 pt-6">
+              <AlertCircle className="h-5 w-5 mt-0.5 text-primary" />
+              <div>
+                <p className="text-sm font-medium">⏳ Rodada Aberta para Palpites</p>
+                <p className="text-sm text-muted-foreground">Faça seus palpites antes do prazo de fechamento!</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isVisualizandoRodadaAtual && isExpired && isRodadaEmAndamento && (
           <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="flex items-start gap-3 pt-6 text-destructive-foreground">
               <AlertCircle className="h-5 w-5 mt-0.5" />
@@ -291,22 +363,22 @@ export default function Palpites() {
             </CardContent>
           </Card>
         ) : (
-          getPalpitosCompletos() < jogos.length && !isExpired && (
-            <Card className="border-secondary bg-secondary/10">
-              <CardContent className="flex items-start gap-3 pt-6">
-                <AlertCircle className="h-5 w-5 text-secondary-foreground mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-secondary-foreground">
-                  <strong>Dica:</strong> Digite apenas os placares que você acredita. 
-                  O sistema detectará automaticamente se é vitória, empate ou derrota!
-                </p>
-              </CardContent>
-            </Card>
-          )
+            isVisualizandoRodadaAtual && getPalpitosCompletos() < jogos.length && !isExpired && (
+              <Card className="border-secondary bg-secondary/10">
+                <CardContent className="flex items-start gap-3 pt-6">
+                  <AlertCircle className="h-5 w-5 text-secondary-foreground mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-secondary-foreground">
+                    <strong>Dica:</strong> Digite apenas os placares que você acredita. 
+                    O sistema detectará automaticamente se é vitória, empate ou derrota!
+                  </p>
+                </CardContent>
+              </Card>
+            )
         )}
 
         {/* Lista de Jogos */}
         <div className="space-y-4">
-          {loadingJogos || loadingRodada ? (
+          {loadingJogosDaRodada || loadingTodasRodadas || loadingRodada ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
@@ -429,7 +501,7 @@ export default function Palpites() {
                     {/* Placar - ÚNICO CONTROLE NECESSÁRIO */}
                     <div className="space-y-3">
                       <label className="text-sm font-medium block text-center">
-                        {isJogoFinalizado ? "Seu palpite foi:" : "Digite o placar que você acredita:"}
+                        {isJogoFinalizado ? "Seu palpite:" : "Digite o placar que você acredita:"}
                       </label>
                       <div className="flex items-center justify-center gap-4">
                         <div className="flex flex-col items-center gap-2">
@@ -445,8 +517,8 @@ export default function Palpites() {
                             className="w-20 h-16 text-center text-2xl font-bold"
                             value={palpite?.placarCasa || ""}
                             onChange={(e) => handlePlacarChange(jogo.id, "placarCasa", e.target.value)}
-                            disabled={!jogoDisponivelParaPalpite || isJogoFinalizado}
-                            readOnly={isJogoFinalizado || !pertenceRodadaAtual}
+                            disabled={!jogoDisponivelParaPalpite || !isVisualizandoRodadaAtual}
+                            readOnly={!isVisualizandoRodadaAtual}
                           />
                         </div>
                         
@@ -465,8 +537,8 @@ export default function Palpites() {
                             className="w-20 h-16 text-center text-2xl font-bold"
                             value={palpite?.placarVisitante || ""}
                             onChange={(e) => handlePlacarChange(jogo.id, "placarVisitante", e.target.value)}
-                            disabled={!jogoDisponivelParaPalpite || isJogoFinalizado}
-                            readOnly={isJogoFinalizado || !pertenceRodadaAtual}
+                            disabled={!jogoDisponivelParaPalpite || !isVisualizandoRodadaAtual}
+                            readOnly={!isVisualizandoRodadaAtual}
                           />
                         </div>
                       </div>
@@ -484,25 +556,56 @@ export default function Palpites() {
                           </Badge>
                         </div>
                       )}
+
+                      {/* Comparação entre palpite e resultado real (Modo Histórico) */}
+                      {isJogoFinalizado && !isVisualizandoRodadaAtual && palpite?.placarCasa && palpite?.placarVisitante && (
+                        <div className="mt-4 pt-4 border-t">
+                          <p className="text-xs font-medium text-center text-muted-foreground mb-2">Resultado Real:</p>
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="text-center">
+                              <div className={`text-2xl font-bold ${
+                                parseInt(palpite.placarCasa) === jogo.placar_casa 
+                                  ? "text-green-600" 
+                                  : "text-red-600"
+                              }`}>
+                                {jogo.placar_casa}
+                              </div>
+                              <div className="text-xs text-muted-foreground">Real</div>
+                            </div>
+                            <span className="text-xl font-bold text-muted-foreground">×</span>
+                            <div className="text-center">
+                              <div className={`text-2xl font-bold ${
+                                parseInt(palpite.placarVisitante) === jogo.placar_visitante 
+                                  ? "text-green-600" 
+                                  : "text-red-600"
+                              }`}>
+                                {jogo.placar_visitante}
+                              </div>
+                              <div className="text-xs text-muted-foreground">Real</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                </CardContent>
-              </Card>
-            );
+                  </CardContent>
+                </Card>
+              );
             })
           ) : (
             <p className="text-center text-muted-foreground py-8">Nenhum jogo disponível no momento</p>
           )}
         </div>
 
-        {/* Botão Salvar */}
-        <Card className="shadow-card sticky bottom-24 md:bottom-8">
-          <CardContent className="pt-6">
-            <Button
-              onClick={handleSalvar}
-              size="lg"
-              className="w-full"
-              disabled={isExpired || !jogosDisponiveis || getPalpitosCompletos() === 0 || salvarPalpitesBatch.isPending}
-            >
+        {/* Botão Salvar - Apenas em modo edição */}
+        {isVisualizandoRodadaAtual && (
+          <Card className="shadow-card sticky bottom-24 md:bottom-8">
+            <CardContent className="pt-6">
+              <Button
+                onClick={handleSalvar}
+                size="lg"
+                className="w-full"
+                disabled={!podeReceberPalpites || !jogosDisponiveis || getPalpitosCompletos() === 0 || salvarPalpitesBatch.isPending}
+              >
               {salvarPalpitesBatch.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -517,6 +620,7 @@ export default function Palpites() {
             </Button>
           </CardContent>
         </Card>
+      )}
       </div>
     </Layout>
   );
