@@ -408,28 +408,40 @@ export const useAtualizarRodada = () => {
 };
 
 // Função helper para calcular pontos de um palpite
+// Função helper BLINDADA para calcular pontos
 export function calcularPontos(
-  palpiteCasa: number,
-  palpiteVisitante: number,
-  placarCasa: number,
-  placarVisitante: number
+  palpiteCasaIn: any,
+  palpiteVisitanteIn: any,
+  placarCasaIn: any,
+  placarVisitanteIn: any
 ): number {
-  // 5 pontos: placar exato
-  if (palpiteCasa === placarCasa && palpiteVisitante === placarVisitante) {
+  // 1. CONVERSÃO FORÇADA: Garante que tudo vira número antes de comparar
+  // (Resolve o erro onde "2" texto não batia com 2 número)
+  const pC = Number(palpiteCasaIn); // Palpite Casa
+  const pV = Number(palpiteVisitanteIn); // Palpite Visitante
+  const rC = Number(placarCasaIn); // Placar Real Casa
+  const rV = Number(placarVisitanteIn); // Placar Real Visitante
+
+  // Se algum valor for inválido (NaN), retorna 0 para não quebrar
+  if (isNaN(pC) || isNaN(pV) || isNaN(rC) || isNaN(rV)) return 0;
+
+  // 2. PRIORIDADE MÁXIMA: PLACAR EXATO (Cravada) -> 5 PONTOS
+  // Verifica se os números são idênticos ANTES de ver quem ganhou
+  if (pC === rC && pV === rV) {
     return 5;
   }
-  
-  // 3 pontos: acertou resultado
-  const resultadoReal = placarCasa > placarVisitante ? 'casa' : 
-                        placarCasa < placarVisitante ? 'visitante' : 'empate';
-  const resultadoPalpite = palpiteCasa > palpiteVisitante ? 'casa' :
-                           palpiteCasa < palpiteVisitante ? 'visitante' : 'empate';
-  
+
+  // 3. PRIORIDADE SECUNDÁRIA: ACERTOU RESULTADO (Vencedor/Empate) -> 3 PONTOS
+  // Quem ganhou no Real?
+  const resultadoReal = rC > rV ? 'casa' : rC < rV ? 'visitante' : 'empate';
+  // Quem ganhou no Palpite?
+  const resultadoPalpite = pC > pV ? 'casa' : pC < pV ? 'visitante' : 'empate';
+
   if (resultadoReal === resultadoPalpite) {
     return 3;
   }
-  
-  // 0 pontos
+
+  // 4. ERROU TUDO -> 0 PONTOS
   return 0;
 }
 

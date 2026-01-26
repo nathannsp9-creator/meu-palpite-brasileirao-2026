@@ -82,12 +82,21 @@ export default function Admin() {
   
   // Estados dos modais
   const [modalNovaRodada, setModalNovaRodada] = useState(false);
+  const [modalEditarRodada, setModalEditarRodada] = useState<Rodada | null>(null);
   const [modalAdicionarJogo, setModalAdicionarJogo] = useState(false);
   const [modalEditarJogo, setModalEditarJogo] = useState<Jogo | null>(null);
   const [modalEditarPlacar, setModalEditarPlacar] = useState<Jogo | null>(null);
 
   // Formulário de nova rodada
   const [rodadaForm, setRodadaForm] = useState({
+    numero: "",
+    status: "aguardando",
+    data_inicio: "",
+    data_fechamento: "",
+  });
+
+  // Formulário de editar rodada
+  const [editarRodadaForm, setEditarRodadaForm] = useState({
     numero: "",
     status: "aguardando",
     data_inicio: "",
@@ -150,6 +159,18 @@ export default function Admin() {
     }
   }, [modalNovaRodada]);
 
+  // Preencher formulário quando modal de editar rodada abre
+  useEffect(() => {
+    if (modalEditarRodada) {
+      setEditarRodadaForm({
+        numero: modalEditarRodada.numero.toString(),
+        status: modalEditarRodada.status,
+        data_inicio: toDateTimeLocal(modalEditarRodada.data_inicio),
+        data_fechamento: toDateTimeLocal(modalEditarRodada.data_fechamento),
+      });
+    }
+  }, [modalEditarRodada]);
+
   // Resetar formulário quando modal de adicionar jogo abre
   useEffect(() => {
     if (modalAdicionarJogo) {
@@ -211,7 +232,7 @@ export default function Admin() {
         data_fechamento: dataFechamento,
       });
       
-      toast.success(`Rodada ${numero} criada com sucesso!`);
+      toast.success(`✅ Rodada ${numero} criada com sucesso!`);
       setModalNovaRodada(false);
       
       // Invalidar cache e selecionar nova rodada
@@ -219,6 +240,42 @@ export default function Admin() {
       setSelectedRodadaId(res.id);
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível criar a rodada");
+    }
+  };
+
+  const handleEditarRodada = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!modalEditarRodada) return;
+
+    const numero = Number(editarRodadaForm.numero);
+    if (Number.isNaN(numero) || numero < 1 || numero > 38) {
+      toast.error("Número de rodada inválido (deve ser entre 1 e 38)");
+      return;
+    }
+
+    const dataInicio = parseDateTimeLocal(editarRodadaForm.data_inicio);
+    const dataFechamento = parseDateTimeLocal(editarRodadaForm.data_fechamento);
+
+    try {
+      await updateRodada.mutateAsync({
+        id: modalEditarRodada.id,
+        data: {
+          numero,
+          status: editarRodadaForm.status as "aguardando" | "em_andamento" | "finalizada",
+          data_inicio: dataInicio,
+          data_fechamento: dataFechamento,
+        },
+      });
+      
+      toast.success(`✅ Rodada ${numero} atualizada com sucesso!`);
+      setModalEditarRodada(null);
+      
+      // Invalidar cache
+      await queryClient.invalidateQueries({ queryKey: ["rodadas"] });
+      await queryClient.invalidateQueries({ queryKey: ["rodada-atual"] });
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível atualizar a rodada");
     }
   };
 
@@ -430,20 +487,35 @@ export default function Admin() {
                     </div>
                   ) : (
                     rodadas.map((rodada) => (
-                      <Button
-                        key={rodada.id}
-                        variant={selectedRodadaId === rodada.id ? "default" : "ghost"}
-                        className="w-full justify-between h-auto py-3"
-                        onClick={() => setSelectedRodadaId(rodada.id)}
-                      >
-                        <span className="font-semibold">Rodada {rodada.numero}</span>
-                        <Badge
-                          variant={getStatusBadgeVariant(rodada.status)}
-                          className="ml-2 text-xs capitalize"
+                      <div key={rodada.id} className="relative group">
+                        <Button
+                          variant={selectedRodadaId === rodada.id ? "default" : "ghost"}
+                          className="w-full justify-between h-auto py-3 pr-12"
+                          onClick={() => setSelectedRodadaId(rodada.id)}
                         >
-                          {rodada.status || "aguardando"}
-                        </Badge>
-                      </Button>
+                          <span className="font-semibold">Rodada {rodada.numero}</span>
+                          <Badge
+                            variant={getStatusBadgeVariant(rodada.status)}
+                            className="ml-2 text-xs capitalize"
+                          >
+                            {rodada.status || "aguardando"}
+                          </Badge>
+                        </Button>
+                        
+                        {/* Botão de Editar - Aparece ao hover */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalEditarRodada(rodada);
+                          }}
+                          title="Editar rodada"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ))
                   )}
                 </div>
@@ -708,6 +780,94 @@ export default function Admin() {
                     <>
                       <Save className="mr-2 h-4 w-4" />
                       Criar Rodada
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Editar Rodada */}
+        <Dialog open={!!modalEditarRodada} onOpenChange={(open) => !open && setModalEditarRodada(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Rodada</DialogTitle>
+              <DialogDescription>
+                Altere as informações da Rodada {modalEditarRodada?.numero}.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditarRodada}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_numero">Número da Rodada *</Label>
+                  <Input
+                    id="edit_numero"
+                    type="number"
+                    min="1"
+                    max="38"
+                    value={editarRodadaForm.numero}
+                    onChange={(e) => setEditarRodadaForm({ ...editarRodadaForm, numero: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_status">Status</Label>
+                  <Select
+                    value={editarRodadaForm.status}
+                    onValueChange={(value) => setEditarRodadaForm({ ...editarRodadaForm, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="aguardando">Aguardando</SelectItem>
+                      <SelectItem value="em_andamento">Em andamento</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_data_inicio">Data de Início</Label>
+                  <Input
+                    id="edit_data_inicio"
+                    type="datetime-local"
+                    value={editarRodadaForm.data_inicio}
+                    onChange={(e) => setEditarRodadaForm({ ...editarRodadaForm, data_inicio: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_data_fechamento">Data de Fechamento</Label>
+                  <Input
+                    id="edit_data_fechamento"
+                    type="datetime-local"
+                    value={editarRodadaForm.data_fechamento}
+                    onChange={(e) => setEditarRodadaForm({ ...editarRodadaForm, data_fechamento: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalEditarRodada(null)}
+                  disabled={updateRodada.isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={updateRodada.isLoading}>
+                  {updateRodada.isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Salvar Alterações
                     </>
                   )}
                 </Button>
