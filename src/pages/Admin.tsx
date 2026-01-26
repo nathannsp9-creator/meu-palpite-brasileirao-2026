@@ -37,10 +37,12 @@ import {
 } from "@/hooks/useJogosFirebase";
 import { Jogo, Rodada } from "@/types/firebase";
 
-const toDateTimeLocal = (date?: Date | null) => {
-  if (!date) return "";
-  const iso = new Date(date).toISOString();
-  return iso.slice(0, 16);
+const formatDateForInput = (date: Date | any) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const offset = d.getTimezoneOffset() * 60000;
+  const localDate = new Date(d.getTime() - offset);
+  return localDate.toISOString().slice(0, 16);
 };
 
 const parseDateTimeLocal = (value: string) => {
@@ -165,8 +167,8 @@ export default function Admin() {
       setEditarRodadaForm({
         numero: modalEditarRodada.numero.toString(),
         status: modalEditarRodada.status,
-        data_inicio: toDateTimeLocal(modalEditarRodada.data_inicio),
-        data_fechamento: toDateTimeLocal(modalEditarRodada.data_fechamento),
+        data_inicio: formatDateForInput(modalEditarRodada.data_inicio),
+        data_fechamento: formatDateForInput(modalEditarRodada.data_fechamento),
       });
     }
   }, [modalEditarRodada]);
@@ -180,7 +182,7 @@ export default function Admin() {
       setNovoJogoForm({
         time_casa: "",
         time_visitante: "",
-        data_jogo: dataInicio ? toDateTimeLocal(dataInicio) : "",
+        data_jogo: dataInicio ? formatDateForInput(dataInicio) : "",
       });
     }
   }, [modalAdicionarJogo, selectedRodada]);
@@ -191,7 +193,7 @@ export default function Admin() {
       setEditarJogoForm({
         time_casa: modalEditarJogo.logo_casa || "",
         time_visitante: modalEditarJogo.logo_visitante || "",
-        data_jogo: toDateTimeLocal(modalEditarJogo.data_jogo),
+        data_jogo: formatDateForInput(modalEditarJogo.data_jogo),
         status: modalEditarJogo.status || "agendado",
       });
     }

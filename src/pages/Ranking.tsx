@@ -1,17 +1,28 @@
+import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, TrendingUp, Target, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Trophy, TrendingUp, Target, Loader2, Award } from "lucide-react";
 import { useRankingCompleto } from "@/hooks/useRankingFirebase";
+import { useRodadas } from "@/hooks/useJogosFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
+import { RankingHistory } from "@/components/RankingHistory";
 
 export default function Ranking() {
   const { profile } = useAuth();
-  const { data: ranking, isLoading } = useRankingCompleto();
+  const [rodadaFiltro, setRodadaFiltro] = useState<string>("todas");
+  const [selectedUser, setSelectedUser] = useState<{ userId: string; nickname: string } | null>(null);
+  
+  const { data: rodadas } = useRodadas();
+  const { data: ranking, isLoading } = useRankingCompleto(
+    rodadaFiltro === "todas" ? undefined : rodadaFiltro
+  );
 
   const userIndex = ranking?.findIndex((r) => r.nickname === profile?.nickname) ?? -1;
   const userEntry = userIndex >= 0 && ranking ? ranking[userIndex] : null;
-  const totalAcertos = (userEntry?.acertos_resultado || 0) + (userEntry?.acertos_placar || 0);
+  
+  const totalAcertos = userEntry?.acertos_resultado || 0;
   const taxaAcerto = userEntry?.total_palpites
     ? Math.round((totalAcertos / userEntry.total_palpites) * 100)
     : null;
@@ -26,10 +37,28 @@ export default function Ranking() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Ranking Geral</h1>
-          <p className="text-muted-foreground">Classificação atual do bolão</p>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Ranking Geral</h1>
+            <p className="text-muted-foreground">Classificação atual do bolão</p>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Filtrar por:</span>
+            <Select value={rodadaFiltro} onValueChange={setRodadaFiltro}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Todas as rodadas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as rodadas</SelectItem>
+                {rodadas?.map((rodada) => (
+                  <SelectItem key={rodada.id} value={rodada.id}>
+                    Rodada {rodada.numero}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -69,7 +98,7 @@ export default function Ranking() {
               <div className="text-2xl font-bold">{taxaAcerto !== null ? `${taxaAcerto}%` : "-"}</div>
               <p className="text-xs text-muted-foreground">
                 {userEntry
-                  ? `${userEntry.acertos_resultado} resultados • ${userEntry.acertos_placar} placares`
+                  ? `🎯 ${userEntry.acertos_resultado} acertos • 🏆 ${userEntry.acertos_placar} cravadas`
                   : "Faça palpites para gerar estatísticas"}
               </p>
             </CardContent>
@@ -81,7 +110,8 @@ export default function Ranking() {
           <CardHeader>
             <CardTitle>Classificação Completa</CardTitle>
             <CardDescription>
-              Acompanhe o desempenho de todos os participantes
+              Acompanhe o desempenho de todos os participantes • Clique em um usuário para ver histórico
+              {rodadaFiltro !== "todas" && ` - Rodada ${rodadas?.find(r => r.id === rodadaFiltro)?.numero}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -91,8 +121,8 @@ export default function Ranking() {
                 <div>Posição</div>
                 <div>Participante</div>
                 <div className="text-right">Pontos</div>
-                <div className="text-right">Resultados</div>
-                <div className="text-right">Placares</div>
+                <div className="text-right">Acertos</div>
+                <div className="text-right">Cravadas</div>
               </div>
 
               {/* Linhas do ranking */}
@@ -106,11 +136,19 @@ export default function Ranking() {
                 ranking.map((user, index) => (
                   <div
                     key={user.user_id}
-                    className={`grid grid-cols-[60px_1fr_80px] md:grid-cols-[80px_1fr_100px_120px_120px] gap-4 items-center rounded-lg border p-4 transition-smooth ${
+                    className={`grid grid-cols-[60px_1fr_80px] md:grid-cols-[80px_1fr_100px_120px_120px] gap-4 items-center rounded-lg border p-4 transition-smooth cursor-pointer ${
                       user.nickname === profile?.nickname
                         ? "border-primary bg-primary/5 shadow-hover"
-                        : "border-border hover:bg-muted/50"
+                        : "border-border hover:bg-muted/50 hover:shadow-md"
                     }`}
+                    onClick={() => setSelectedUser({ userId: user.user_id, nickname: user.nickname })}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        setSelectedUser({ userId: user.user_id, nickname: user.nickname });
+                      }
+                    }}
                   >
                     {/* Posição */}
                     <div className="flex items-center gap-2">
@@ -131,7 +169,7 @@ export default function Ranking() {
                         </div>
                         {/* Stats mobile */}
                         <div className="md:hidden text-xs text-muted-foreground">
-                          {user.acertos_resultado} resultados • {user.acertos_placar} placares
+                          🎯 {user.acertos_resultado} • 🏆 {user.acertos_placar}
                         </div>
                       </div>
                     </div>
@@ -154,10 +192,10 @@ export default function Ranking() {
                       </Badge>
                     </div>
 
-                    {/* Placares - apenas desktop */}
+                    {/* Cravadas - apenas desktop */}
                     <div className="hidden md:flex justify-end">
                       <Badge variant="outline" className="gap-1">
-                        <Trophy className="h-3 w-3" />
+                        <Award className="h-3 w-3 text-yellow-500" />
                         {user.acertos_placar}
                       </Badge>
                     </div>
@@ -168,22 +206,30 @@ export default function Ranking() {
           </CardContent>
         </Card>
 
-        {/* Legenda */}
         <Card className="shadow-card bg-muted/30">
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <Target className="h-4 w-4 text-primary" />
-                <span><strong>Resultados:</strong> Acertos de vitória/empate</span>
+                <span><strong>Acertos (3pts+):</strong> Acertou vencedor/empate (inclui cravadas)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-secondary" />
-                <span><strong>Placares:</strong> Acertos de placar exato</span>
+                <Award className="h-4 w-4 text-yellow-500" />
+                <span><strong>Cravadas (5pts):</strong> Acertou placar exato</span>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {selectedUser && (
+        <RankingHistory
+          userId={selectedUser.userId}
+          nickname={selectedUser.nickname}
+          isOpen={!!selectedUser}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
     </Layout>
   );
 }

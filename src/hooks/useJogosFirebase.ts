@@ -83,6 +83,23 @@ export const useRodadaAtual = () => {
           updated_at: data.updated_at?.toDate() || new Date(),
         } as Rodada;
 
+        // Auto-atualizar status se data de fechamento passou
+        const agora = new Date();
+        if (rodada.data_fechamento && agora > rodada.data_fechamento && rodada.status === 'em_andamento') {
+          console.log('[useRodadaAtual] Rodada expirada, atualizando status para "finalizada"...');
+          try {
+            await updateDoc(doc.ref, {
+              status: 'finalizada',
+              updated_at: serverTimestamp(),
+            });
+            rodada.status = 'finalizada';
+            console.log('[useRodadaAtual] Status atualizado com sucesso');
+          } catch (error) {
+            console.error('[useRodadaAtual] Erro ao atualizar status da rodada:', error);
+            // Não lançar erro, apenas logar
+          }
+        }
+
         console.log('[useRodadaAtual] Rodada encontrada:', {
           id: rodada.id,
           numero: rodada.numero,

@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Save, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target } from "lucide-react";
 import { toast } from "sonner";
-import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogosFirebase";
+import { useRodadaAtual, useProximosJogos, calcularPontos } from "@/hooks/useJogosFirebase";
 import { useMeusPalpites, useSalvarPalpitesBatch } from "@/hooks/usePalpitesFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
 import { URL_ESCUDOS } from "@/constants/urls";
@@ -140,6 +140,40 @@ export default function Palpites() {
     return Object.values(palpites).filter(isPalpiteCompleto).length;
   };
 
+  const calcularEstatisticasRodada = () => {
+    let totalPontos = 0;
+    let jogosPontuados = 0;
+    let cravadas = 0;
+    let resultados = 0;
+
+    jogos.forEach((jogo: any) => {
+      if (jogo.status === "finalizado" && jogo.placar_casa !== null && jogo.placar_visitante !== null) {
+        const palpite = palpites[jogo.id];
+        if (palpite?.placarCasa && palpite?.placarVisitante) {
+          const pontos = calcularPontos(
+            parseInt(palpite.placarCasa),
+            parseInt(palpite.placarVisitante),
+            jogo.placar_casa,
+            jogo.placar_visitante
+          );
+          
+          totalPontos += pontos;
+          jogosPontuados++;
+          
+          if (pontos === 5) cravadas++;
+          if (pontos === 3) resultados++;
+        }
+      }
+    });
+
+    const aproveitamento = jogosPontuados > 0 
+      ? Math.round((totalPontos / (jogosPontuados * 5)) * 100) 
+      : 0;
+
+    return { totalPontos, jogosPontuados, aproveitamento, cravadas, resultados };
+  };
+
+  const stats = calcularEstatisticasRodada();
   const jogosDisponiveis = jogos && jogos.length > 0;
 
   return (
@@ -163,6 +197,38 @@ export default function Palpites() {
             )}
           </div>
         </div>
+
+        {/* Resumo de Pontuação da Rodada */}
+        {stats.jogosPontuados > 0 && (
+          <Card className="shadow-card bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-primary" />
+                Desempenho nesta Rodada
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-primary">{stats.totalPontos}</div>
+                  <div className="text-xs text-muted-foreground">Pontos</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-secondary">{stats.aproveitamento}%</div>
+                  <div className="text-xs text-muted-foreground">Aproveitamento</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-green-600">{stats.cravadas}</div>
+                  <div className="text-xs text-muted-foreground">Cravadas (5pts)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-yellow-600">{stats.resultados}</div>
+                  <div className="text-xs text-muted-foreground">Resultados (3pts)</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Progress Card */}
         <Card className="shadow-card bg-gradient-brasil">
@@ -229,11 +295,37 @@ export default function Palpites() {
               const palpite = palpites[jogo.id];
               const isCompleto = isPalpiteCompleto(palpite);
               const resultadoInferido = inferirResultado(palpite?.placarCasa, palpite?.placarVisitante);
+              
+              const isJogoFinalizado = jogo.status === "finalizado" && jogo.placar_casa !== null && jogo.placar_visitante !== null;
+              
+              let pontos = 0;
+              let pontosColor = "";
+              let pontosLabel = "";
+              
+              if (isJogoFinalizado && palpite?.placarCasa && palpite?.placarVisitante) {
+                pontos = calcularPontos(
+                  parseInt(palpite.placarCasa),
+                  parseInt(palpite.placarVisitante),
+                  jogo.placar_casa,
+                  jogo.placar_visitante
+                );
+                
+                if (pontos === 5) {
+                  pontosColor = "bg-green-500 text-white";
+                  pontosLabel = "🏆 +5 Pontos (Cravada!)";
+                } else if (pontos === 3) {
+                  pontosColor = "bg-yellow-500 text-white";
+                  pontosLabel = "🎯 +3 Pontos (Resultado)";
+                } else {
+                  pontosColor = "bg-red-500 text-white";
+                  pontosLabel = "❌ 0 Pontos";
+                }
+              }
 
               return (
-                <Card key={jogo.id} className={`shadow-card transition-smooth ${isCompleto ? "border-primary bg-primary/5" : ""}`}>
+                <Card key={jogo.id} className={`shadow-card transition-smooth ${isCompleto ? "border-primary bg-primary/5" : ""} ${isJogoFinalizado ? "border-2" : ""}`}>
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <CardDescription className="flex items-center gap-2">
                         <Clock className="h-3 w-3" />
                         <span>
@@ -245,12 +337,19 @@ export default function Palpites() {
                           })}
                         </span>
                       </CardDescription>
-                      {isCompleto && (
-                        <Badge variant="default" className="gap-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Completo
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isJogoFinalizado && palpite?.placarCasa && palpite?.placarVisitante && (
+                          <Badge className={`${pontosColor} font-bold px-3 py-1`}>
+                            {pontosLabel}
+                          </Badge>
+                        )}
+                        {isCompleto && !isJogoFinalizado && (
+                          <Badge variant="default" className="gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Completo
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -272,7 +371,16 @@ export default function Palpites() {
                         <div className="text-xs text-muted-foreground">Mandante</div>
                       </div>
 
-                      <div className="text-2xl font-bold text-muted-foreground">VS</div>
+                      <div className="text-2xl font-bold text-muted-foreground">
+                        {isJogoFinalizado ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-sm text-muted-foreground">Placar Final</span>
+                            <span className="text-3xl">{jogo.placar_casa} × {jogo.placar_visitante}</span>
+                          </div>
+                        ) : (
+                          "VS"
+                        )}
+                      </div>
 
                       {/* Time Visitante */}
                       <div className="text-left space-y-2">
@@ -294,7 +402,7 @@ export default function Palpites() {
                     {/* Placar - ÚNICO CONTROLE NECESSÁRIO */}
                     <div className="space-y-3">
                       <label className="text-sm font-medium block text-center">
-                        Digite o placar que você acredita:
+                        {isJogoFinalizado ? "Seu palpite foi:" : "Digite o placar que você acredita:"}
                       </label>
                       <div className="flex items-center justify-center gap-4">
                         <div className="flex flex-col items-center gap-2">
@@ -310,7 +418,8 @@ export default function Palpites() {
                             className="w-20 h-16 text-center text-2xl font-bold"
                             value={palpite?.placarCasa || ""}
                             onChange={(e) => handlePlacarChange(jogo.id, "placarCasa", e.target.value)}
-                            disabled={!jogosDisponiveis || isExpired}
+                            disabled={!jogosDisponiveis || isExpired || isJogoFinalizado}
+                            readOnly={isJogoFinalizado}
                           />
                         </div>
                         
@@ -329,13 +438,14 @@ export default function Palpites() {
                             className="w-20 h-16 text-center text-2xl font-bold"
                             value={palpite?.placarVisitante || ""}
                             onChange={(e) => handlePlacarChange(jogo.id, "placarVisitante", e.target.value)}
-                            disabled={!jogosDisponiveis || isExpired}
+                            disabled={!jogosDisponiveis || isExpired || isJogoFinalizado}
+                            readOnly={isJogoFinalizado}
                           />
                         </div>
                       </div>
 
                       {/* Feedback Visual do Resultado Inferido */}
-                      {resultadoInferido && (
+                      {resultadoInferido && !isJogoFinalizado && (
                         <div className="flex items-center justify-center gap-2 pt-2">
                           <Badge 
                             variant={resultadoInferido === "empate" ? "secondary" : "default"}
