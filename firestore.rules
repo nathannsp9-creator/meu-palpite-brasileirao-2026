@@ -17,10 +17,10 @@ service cloud.firestore {
     }
     
     // Verifica se a rodada aceita palpites
-    // CORREÇÃO: Status alterado para 'em_andamento' para coincidir com a lógica do seu app
+    // Status 'aguardando' = palpites abertos | 'em_andamento' = palpites fechados
     function isRodadaAberta(rodadaId) {
       let rodada = get(/databases/$(database)/documents/rodadas/$(rodadaId));
-      return rodada.data.status == 'em_andamento' && 
+      return rodada.data.status == 'aguardando' && 
              rodada.data.data_fechamento > request.time;
     }
 

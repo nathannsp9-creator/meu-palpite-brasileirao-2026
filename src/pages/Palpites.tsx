@@ -66,11 +66,12 @@ export default function Palpites() {
   const rodadaSelecionada = todasRodadas?.find(r => r.id === rodadaSelecionadaId) || null;
   const jogos = jogosDaRodada || [];
   const rodada = rodadaSelecionada || null;
-  const isVisualizandoRodadaAtual = rodadaSelecionadaId === rodadaAtual?.id;
+  const isVisualizandoRodadaAtual = !!(rodadaAtual && rodadaSelecionadaId && rodadaSelecionadaId === rodadaAtual.id);
   const isExpired = rodada?.data_fechamento ? new Date() > new Date(rodada.data_fechamento) : false;
   const isRodadaFinalizada = rodada?.status === 'finalizada';
   const isRodadaAguardando = rodada?.status === 'aguardando';
   const isRodadaEmAndamento = rodada?.status === 'em_andamento';
+  const podeReceberPalpites = !!(rodada && isVisualizandoRodadaAtual && isRodadaAguardando && !isExpired);
 
   const isJogoDisponivelParaPalpite = (jogo: any): boolean => {
     if (!rodada) return false;
