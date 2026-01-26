@@ -36,6 +36,8 @@ import {
   useFinalizarJogoECalcularPontos,
 } from "@/hooks/useJogosFirebase";
 import { Jogo, Rodada } from "@/types/firebase";
+import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const formatDateForInput = (date: Date | any) => {
   if (!date) return '';
@@ -149,6 +151,38 @@ export default function Admin() {
     }
   }, [rodadas, selectedRodadaId]);
 
+  useEffect(() => {
+    const autoAtualizarStatusRodadas = async () => {
+      if (!rodadas || rodadas.length === 0) return;
+
+      const agora = new Date();
+      const rodadasParaAtualizar = rodadas.filter((rodada) => {
+        if (rodada.status !== 'aguardando') return false;
+        if (!rodada.data_fechamento) return false;
+        return agora >= new Date(rodada.data_fechamento);
+      });
+
+      if (rodadasParaAtualizar.length === 0) return;
+
+      try {
+        for (const rodada of rodadasParaAtualizar) {
+          const rodadaRef = doc(db, 'rodadas', rodada.id);
+          await updateDoc(rodadaRef, {
+            status: 'em_andamento',
+            updated_at: serverTimestamp(),
+          });
+        }
+
+        await queryClient.invalidateQueries({ queryKey: ['rodadas'] });
+        await queryClient.invalidateQueries({ queryKey: ['rodada-atual'] });
+      } catch (error) {
+        console.error('Erro ao atualizar status automático das rodadas:', error);
+      }
+    };
+
+    autoAtualizarStatusRodadas();
+  }, [rodadas, queryClient]);
+
   // Resetar formulário quando modal de nova rodada abre
   useEffect(() => {
     if (modalNovaRodada) {
@@ -259,6 +293,37 @@ export default function Admin() {
     const dataInicio = parseDateTimeLocal(editarRodadaForm.data_inicio);
     const dataFechamento = parseDateTimeLocal(editarRodadaForm.data_fechamento);
 
+    if (editarRodadaForm.status === 'finalizada') {
+      try {
+        const jogosRef = collection(db, 'jogos');
+        const q = query(jogosRef, where('rodada_id', '==', modalEditarRodada.id));
+        const jogosSnapshot = await getDocs(q);
+
+        if (jogosSnapshot.empty) {
+          toast.error("❌ Erro: A rodada não possui jogos cadastrados. Adicione jogos antes de finalizar.");
+          return;
+        }
+
+        const jogosSemPlacar = jogosSnapshot.docs.filter((doc) => {
+          const data = doc.data();
+          return data.placar_casa === null || data.placar_casa === undefined ||
+                 data.placar_visitante === null || data.placar_visitante === undefined;
+        });
+
+        if (jogosSemPlacar.length > 0) {
+          toast.error(
+            `❌ Erro: ${jogosSemPlacar.length} jogo(s) sem placar definido. Preencha todos os placares antes de finalizar a rodada.`,
+            { duration: 5000 }
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Erro ao validar placares:', error);
+        toast.error("Erro ao validar placares dos jogos");
+        return;
+      }
+    }
+
     try {
       await updateRodada.mutateAsync({
         id: modalEditarRodada.id,
@@ -273,7 +338,6 @@ export default function Admin() {
       toast.success(`✅ Rodada ${numero} atualizada com sucesso!`);
       setModalEditarRodada(null);
       
-      // Invalidar cache
       await queryClient.invalidateQueries({ queryKey: ["rodadas"] });
       await queryClient.invalidateQueries({ queryKey: ["rodada-atual"] });
     } catch (err: any) {

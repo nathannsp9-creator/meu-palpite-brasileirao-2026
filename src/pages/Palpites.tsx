@@ -56,6 +56,26 @@ export default function Palpites() {
   const jogos = proximosJogos || [];
   const rodada = rodadaAtual || null;
   const isExpired = rodada?.data_fechamento ? new Date() > new Date(rodada.data_fechamento) : false;
+  const isRodadaFinalizada = rodada?.status === 'finalizada';
+  const isRodadaAguardando = rodada?.status === 'aguardando';
+
+  const isJogoDisponivelParaPalpite = (jogo: any): boolean => {
+    if (!rodada) return false;
+    
+    // 1. Jogo deve pertencer à rodada atual (ISOLAMENTO)
+    if (jogo.rodada_id !== rodada.id) return false;
+    
+    // 2. Rodada deve estar com status "aguardando" (palpites abertos)
+    if (!isRodadaAguardando) return false;
+    
+    // 3. Data de fechamento não pode ter passado
+    if (isExpired) return false;
+    
+    // 4. Jogo não pode estar finalizado
+    if (jogo.status === 'finalizado') return false;
+    
+    return true;
+  };
 
   // Carregar palpites salvos anteriormente
   useEffect(() => {
@@ -297,6 +317,8 @@ export default function Palpites() {
               const resultadoInferido = inferirResultado(palpite?.placarCasa, palpite?.placarVisitante);
               
               const isJogoFinalizado = jogo.status === "finalizado" && jogo.placar_casa !== null && jogo.placar_visitante !== null;
+              const jogoDisponivelParaPalpite = isJogoDisponivelParaPalpite(jogo);
+              const pertenceRodadaAtual = rodada ? jogo.rodada_id === rodada.id : false;
               
               let pontos = 0;
               let pontosColor = "";
@@ -323,7 +345,7 @@ export default function Palpites() {
               }
 
               return (
-                <Card key={jogo.id} className={`shadow-card transition-smooth ${isCompleto ? "border-primary bg-primary/5" : ""} ${isJogoFinalizado ? "border-2" : ""}`}>
+                <Card key={jogo.id} className={`shadow-card transition-smooth ${isCompleto ? "border-primary bg-primary/5" : ""} ${isJogoFinalizado ? "border-2" : ""} ${!pertenceRodadaAtual ? "opacity-50" : ""}`}>
                   <CardHeader>
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <CardDescription className="flex items-center gap-2">
@@ -338,6 +360,11 @@ export default function Palpites() {
                         </span>
                       </CardDescription>
                       <div className="flex items-center gap-2">
+                        {!pertenceRodadaAtual && (
+                          <Badge variant="outline" className="text-xs">
+                            Rodada {jogo.rodada_numero || '?'}
+                          </Badge>
+                        )}
                         {isJogoFinalizado && palpite?.placarCasa && palpite?.placarVisitante && (
                           <Badge className={`${pontosColor} font-bold px-3 py-1`}>
                             {pontosLabel}
@@ -418,8 +445,8 @@ export default function Palpites() {
                             className="w-20 h-16 text-center text-2xl font-bold"
                             value={palpite?.placarCasa || ""}
                             onChange={(e) => handlePlacarChange(jogo.id, "placarCasa", e.target.value)}
-                            disabled={!jogosDisponiveis || isExpired || isJogoFinalizado}
-                            readOnly={isJogoFinalizado}
+                            disabled={!jogoDisponivelParaPalpite || isJogoFinalizado}
+                            readOnly={isJogoFinalizado || !pertenceRodadaAtual}
                           />
                         </div>
                         
@@ -438,8 +465,8 @@ export default function Palpites() {
                             className="w-20 h-16 text-center text-2xl font-bold"
                             value={palpite?.placarVisitante || ""}
                             onChange={(e) => handlePlacarChange(jogo.id, "placarVisitante", e.target.value)}
-                            disabled={!jogosDisponiveis || isExpired || isJogoFinalizado}
-                            readOnly={isJogoFinalizado}
+                            disabled={!jogoDisponivelParaPalpite || isJogoFinalizado}
+                            readOnly={isJogoFinalizado || !pertenceRodadaAtual}
                           />
                         </div>
                       </div>

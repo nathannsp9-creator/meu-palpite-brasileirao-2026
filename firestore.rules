@@ -17,7 +17,8 @@ service cloud.firestore {
     // Função helper para verificar se a rodada está aberta para palpites
     function isRodadaAberta(rodadaId) {
       let rodada = get(/databases/$(database)/documents/rodadas/$(rodadaId));
-      return rodada.data.data_fechamento > request.time;
+      return rodada.data.status == 'aguardando' && 
+             rodada.data.data_fechamento > request.time;
     }
     
     // Coleção: profiles
@@ -56,15 +57,20 @@ service cloud.firestore {
     
     // Coleção: palpites
     // Palpites: leitura pública; usuário só cria/edita o próprio; admin pode atualizar (para cálculo de pontos)
-    // Palpites só podem ser criados/editados se a rodada ainda estiver aberta
+    // Palpites só podem ser criados/editados se:
+    // 1. A rodada estiver com status 'em_andamento'
+    // 2. A data_fechamento não tiver passado
+    // 3. O jogo pertencer à rodada especificada (isolamento)
     match /palpites/{palpiteId} {
       allow read: if true;
       allow create: if isAuthenticated() && 
                        request.resource.data.usuario_id == request.auth.uid &&
+                       jogoPertenteARodada(request.resource.data.jogo_id, request.resource.data.rodada_id) &&
                        isRodadaAberta(request.resource.data.rodada_id);
       allow update: if isAdmin() || 
                        (isAuthenticated() && 
                         resource.data.usuario_id == request.auth.uid &&
+                        jogoPertenteARodada(resource.data.jogo_id, resource.data.rodada_id) &&
                         isRodadaAberta(resource.data.rodada_id));
       allow delete: if false;
     }

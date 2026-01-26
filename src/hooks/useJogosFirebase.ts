@@ -85,15 +85,15 @@ export const useRodadaAtual = () => {
 
         // Auto-atualizar status se data de fechamento passou
         const agora = new Date();
-        if (rodada.data_fechamento && agora > rodada.data_fechamento && rodada.status === 'em_andamento') {
-          console.log('[useRodadaAtual] Rodada expirada, atualizando status para "finalizada"...');
+        if (rodada.data_fechamento && agora > rodada.data_fechamento && rodada.status === 'aguardando') {
+          console.log('[useRodadaAtual] Rodada expirada, atualizando status para "em_andamento"...');
           try {
             await updateDoc(doc.ref, {
-              status: 'finalizada',
+              status: 'em_andamento',
               updated_at: serverTimestamp(),
             });
-            rodada.status = 'finalizada';
-            console.log('[useRodadaAtual] Status atualizado com sucesso');
+            rodada.status = 'em_andamento';
+            console.log('[useRodadaAtual] Status atualizado para "em_andamento" com sucesso');
           } catch (error) {
             console.error('[useRodadaAtual] Erro ao atualizar status da rodada:', error);
             // Não lançar erro, apenas logar
