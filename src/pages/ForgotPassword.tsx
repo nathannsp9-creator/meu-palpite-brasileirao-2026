@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,16 +12,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"; // Importando o Modal (Pop-up)
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { auth } from "@/lib/firebase";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  
-  // Novo estado para controlar a visibilidade do Pop-up
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  
+  const navigate = useNavigate();
 
   const handleReset = async () => {
     if (!email) {
@@ -32,16 +33,15 @@ export default function ForgotPassword() {
 
     try {
       await sendPasswordResetEmail(auth, email, {
-        url: `${window.location.origin}/#/reset-password`,
+        // Redireciona o usuário para a página de reset após clicar no email
+        url: `${window.location.origin}/#/reset-password`, 
       });
       
-      // Ao invés de só mostrar o toast, agora abrimos o modal
-      setShowSuccessDialog(true); 
+      // Abre o pop-up de sucesso
+      setShowSuccessDialog(true);
       
     } catch (error: any) {
-      console.log(error); // Bom para debugar
-      
-      // Tratamento básico de erros comuns do Firebase
+      console.log(error);
       if (error.code === 'auth/user-not-found') {
         toast.error("Usuário não encontrado.");
       } else {
@@ -71,7 +71,7 @@ export default function ForgotPassword() {
         </CardContent>
       </Card>
 
-      {/* O Pop-up de Alerta sobre o SPAM */}
+      {/* Pop-up de Confirmação */}
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -88,7 +88,13 @@ export default function ForgotPassword() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setShowSuccessDialog(false)}>
+            <AlertDialogAction 
+              onClick={() => {
+                setShowSuccessDialog(false);
+                // Redireciona para a tela de Login (Auth.tsx)
+                navigate("/auth"); 
+              }}
+            >
               Entendi, vou verificar
             </AlertDialogAction>
           </AlertDialogFooter>
