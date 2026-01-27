@@ -21,6 +21,7 @@ export const TIMES: TimeOption[] = [
   { name: "Bragantino", slug: "bragantino.webp" },
   { name: "Remo", slug: "remo.webp" },
   { name: "Santos", slug: "santos.webp" },
+  { name: "São Paulo", slug: "são paulo.webp" },
   { name: "Vasco", slug: "vasco da gama.webp" },
   { name: "Vitória", slug: "vitória.webp" },
 ];
