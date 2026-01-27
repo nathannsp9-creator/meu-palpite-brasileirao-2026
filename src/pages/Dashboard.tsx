@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trophy, Target, Calendar, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContextFirebase";
-import { useRodadaAtual, useProximosJogos } from "@/hooks/useJogosFirebase";
+import { useRodadaAtual, useJogosPorRodada } from "@/hooks/useJogosFirebase";
 import { useTopRanking } from "@/hooks/useRankingFirebase";
 import { useMeusPalpites } from "@/hooks/usePalpitesFirebase";
 import { format } from "date-fns";
@@ -14,7 +14,7 @@ import { ptBR } from "date-fns/locale";
 export default function Dashboard() {
   const { profile } = useAuth();
   const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
-  const { data: proximosJogos, isLoading: loadingJogos } = useProximosJogos(3);
+  const { data: proximosJogos, isLoading: loadingJogos } = useJogosPorRodada(rodadaAtual?.id);
   const { data: topRanking, isLoading: loadingRanking } = useTopRanking(5);
   const { data: meusPalpites } = useMeusPalpites(rodadaAtual?.id);
 
