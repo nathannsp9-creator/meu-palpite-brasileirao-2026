@@ -213,3 +213,76 @@ export const useSalvarPalpitesBatch = () => {
     },
   });
 };
+
+// Hook para buscar palpites de um jogo específico com dados do usuário
+export const usePalpitesDoJogo = (jogoId?: string) => {
+  return useQuery({
+    queryKey: ['palpites-jogo', jogoId],
+    queryFn: async (): Promise<(Palpite & { nome: string; nickname: string })[]> => {
+      if (!jogoId) return [];
+
+      try {
+        const palpitesRef = collection(db, 'palpites');
+        const q = query(
+          palpitesRef,
+          where('jogo_id', '==', jogoId)
+        );
+
+        const snapshot = await getDocs(q);
+        const palpitesData = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            usuario_id: data.usuario_id,
+            jogo_id: data.jogo_id,
+            rodada_id: data.rodada_id,
+            palpite_casa: data.palpite_casa,
+            palpite_visitante: data.palpite_visitante,
+            pontos_obtidos: data.pontos_obtidos,
+            status: data.status || 'pendente',
+            created_at: data.created_at?.toDate() || new Date(),
+            updated_at: data.updated_at?.toDate() || new Date(),
+            nome: '',
+            nickname: '',
+          };
+        });
+
+        // Buscar perfis dos usuários
+        const profilesRef = collection(db, 'profiles');
+        const userIds = [...new Set(palpitesData.map(p => p.usuario_id))];
+
+        const profiles: Record<string, { nome: string; nickname: string }> = {};
+        
+        for (const userId of userIds) {
+          const userQuery = query(profilesRef, where('id', '==', userId));
+          const userSnapshot = await getDocs(userQuery);
+          
+          if (!userSnapshot.empty) {
+            const profileData = userSnapshot.docs[0].data();
+            profiles[userId] = {
+              nome: profileData.nome || 'Usuário Anônimo',
+              nickname: profileData.nickname || 'anonymous',
+            };
+          } else {
+            profiles[userId] = {
+              nome: 'Usuário Anônimo',
+              nickname: 'anonymous',
+            };
+          }
+        }
+
+        // Mesclar dados de palpites com perfis
+        return palpitesData.map(palpite => ({
+          ...palpite,
+          nome: profiles[palpite.usuario_id]?.nome || 'Usuário Anônimo',
+          nickname: profiles[palpite.usuario_id]?.nickname || 'anonymous',
+        }));
+      } catch (error) {
+        console.error('Erro ao buscar palpites do jogo:', error);
+        return [];
+      }
+    },
+    enabled: !!jogoId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
+};

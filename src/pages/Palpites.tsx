@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
+import { PalpitesTransparencia } from "@/components/PalpitesTransparencia";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target, History } from "lucide-react";
+import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target, History, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { useRodadaAtual, useRodadas, useJogosPorRodada, calcularPontos } from "@/hooks/useJogosFirebase";
 import { useMeusPalpites, useSalvarPalpitesBatch } from "@/hooks/usePalpitesFirebase";
@@ -49,6 +50,7 @@ export default function Palpites() {
   const navigate = useNavigate();
   const [palpites, setPalpites] = useState<Record<string, PalpiteLocal>>({});
   const [rodadaSelecionadaId, setRodadaSelecionadaId] = useState<string | null>(null);
+  const [transparenciaOpen, setTransparenciaOpen] = useState(false);
 
   const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
   const { data: todasRodadas, isLoading: loadingTodasRodadas } = useRodadas();
@@ -223,6 +225,16 @@ export default function Palpites() {
             <p className="text-muted-foreground">Rodada {rodada?.numero ?? "-"} - Brasileirão Série A</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            {/* Botão Ver Palpites da Galera */}
+            <Button
+              variant="outline"
+              onClick={() => setTransparenciaOpen(true)}
+              className="flex items-center gap-2 whitespace-nowrap"
+            >
+              <Eye className="h-4 w-4" />
+              Ver Palpites
+            </Button>
+
             {/* Seletor de Rodada */}
             <Select value={rodadaSelecionadaId || ""} onValueChange={setRodadaSelecionadaId}>
               <SelectTrigger className="w-full sm:w-[200px]">
@@ -623,6 +635,9 @@ export default function Palpites() {
         </Card>
       )}
       </div>
+      
+      {/* Modal de Transparência */}
+      <PalpitesTransparencia open={transparenciaOpen} onOpenChange={setTransparenciaOpen} />
     </Layout>
   );
 }
