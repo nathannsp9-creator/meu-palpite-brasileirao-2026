@@ -355,11 +355,13 @@ export default function Palpites() {
 
         {isVisualizandoRodadaAtual && isExpired && isRodadaEmAndamento && (
           <Card className="border-destructive/50 bg-destructive/10">
-            <CardContent className="flex items-start gap-3 pt-6 text-destructive-foreground">
+            {/* CORREÇÃO AQUI: Mudei de text-destructive-foreground para text-destructive */}
+            <CardContent className="flex items-start gap-3 pt-6 text-destructive">
               <AlertCircle className="h-5 w-5 mt-0.5" />
               <div>
                 <p className="text-sm font-medium">Palpites Encerrados</p>
-                <p className="text-sm">O prazo para enviar palpites desta rodada acabou.</p>
+                {/* Opcional: O texto descritivo pode ser text-muted-foreground ou manter text-destructive */}
+                <p className="text-sm opacity-90">O prazo para enviar palpites desta rodada acabou.</p>
               </div>
             </CardContent>
           </Card>

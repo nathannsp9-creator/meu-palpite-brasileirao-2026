@@ -1,5 +1,11 @@
 {
   "projects": {
-    "default": "meu-palpite-testes"
-  }
+    "default": "meu-palpite-testes",
+    "dev": "meu-palpite-testes",
+    "prod": "meu-palpite-4698f",
+    "firebase use dev": "meu-palpite-testes",
+    "firebase use prod": "meu-palpite-4698f"
+  },
+  "targets": {},
+  "etags": {}
 }
