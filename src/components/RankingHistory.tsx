@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trophy, Target, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Trophy, Target, TrendingUp, Sword } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +13,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { ComparisonModal } from "@/components/ranking/ComparisonModal";
+import { useAuth } from "@/contexts/AuthContextFirebase";
 
 interface RankingHistoryProps {
   userId: string;
@@ -28,6 +32,10 @@ interface RodadaStats {
 }
 
 export function RankingHistory({ userId, nickname, isOpen, onClose }: RankingHistoryProps) {
+  const { profile } = useAuth();
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+
+  // Query para buscar dados do usuário alvo
   const { data: historico, isLoading } = useQuery({
     queryKey: ["ranking-history", userId],
     queryFn: async (): Promise<RodadaStats[]> => {
@@ -86,22 +94,117 @@ export function RankingHistory({ userId, nickname, isOpen, onClose }: RankingHis
     staleTime: 2 * 60 * 1000,
   });
 
+  // Query para buscar dados do usuário atual (para comparação)
+  const { data: historicoAtual, isLoading: isLoadingAtual } = useQuery({
+    queryKey: ["ranking-history", profile?.id],
+    queryFn: async (): Promise<RodadaStats[]> => {
+      if (!profile?.id) return [];
+      
+      const palpitesRef = collection(db, "palpites");
+      const q = query(palpitesRef, where("usuario_id", "==", profile.id));
+      const snapshot = await getDocs(q);
+
+      const rodadasMap = new Map<string, RodadaStats>();
+
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const rodadaId = data.rodada_id;
+
+        if (!rodadasMap.has(rodadaId)) {
+          rodadasMap.set(rodadaId, {
+            rodada_numero: 0,
+            total_pontos: 0,
+            total_palpites: 0,
+            acertos_placar: 0,
+            acertos_resultado: 0,
+          });
+        }
+
+        const stats = rodadasMap.get(rodadaId)!;
+        stats.total_palpites++;
+
+        if (data.pontos_obtidos !== null && data.pontos_obtidos !== undefined) {
+          stats.total_pontos += data.pontos_obtidos;
+
+          if (data.pontos_obtidos === 5) {
+            stats.acertos_placar++;
+            stats.acertos_resultado++;
+          } else if (data.pontos_obtidos === 3) {
+            stats.acertos_resultado++;
+          }
+        }
+      });
+
+      const rodasRef = collection(db, "rodadas");
+      const rodasSnapshot = await getDocs(rodasRef);
+      const rodadaNumeros = new Map<string, number>();
+
+      rodasSnapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        rodadaNumeros.set(doc.id, data.numero);
+      });
+
+      const historico = Array.from(rodadasMap.entries()).map(([rodadaId, stats]) => ({
+        ...stats,
+        rodada_numero: rodadaNumeros.get(rodadaId) || 0,
+      }));
+
+      return historico.sort((a, b) => a.rodada_numero - b.rodada_numero);
+    },
+    enabled: isOpen && !!profile?.id && profile.id !== userId,
+    staleTime: 2 * 60 * 1000,
+  });
+
   const totalGeral = historico?.reduce((acc, r) => acc + r.total_pontos, 0) || 0;
   const mediaRodada = historico && historico.length > 0 
     ? (totalGeral / historico.length).toFixed(1) 
     : "0";
   const melhorRodada = historico?.reduce((max, r) => (r.total_pontos > max.total_pontos ? r : max), historico[0]);
 
+  // Preparar dados para comparação
+  const targetUserData = historico ? {
+    user_id: userId,
+    nickname: nickname,
+    total_pontos: totalGeral,
+    acertos_resultado: historico.reduce((acc, r) => acc + r.acertos_resultado, 0),
+    acertos_placar: historico.reduce((acc, r) => acc + r.acertos_placar, 0),
+    total_palpites: historico.reduce((acc, r) => acc + r.total_palpites, 0),
+  } : null;
+
+  const totalGeralAtual = historicoAtual?.reduce((acc, r) => acc + r.total_pontos, 0) || 0;
+  const currentUserData = profile && historicoAtual ? {
+    user_id: profile.id,
+    nickname: profile.nickname,
+    total_pontos: totalGeralAtual,
+    acertos_resultado: historicoAtual.reduce((acc, r) => acc + r.acertos_resultado, 0),
+    acertos_placar: historicoAtual.reduce((acc, r) => acc + r.acertos_placar, 0),
+    total_palpites: historicoAtual.reduce((acc, r) => acc + r.total_palpites, 0),
+  } : null;
+
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-primary" />
-            Histórico de @{nickname}
-          </SheetTitle>
-          <SheetDescription>Desempenho detalhado por rodada</SheetDescription>
-        </SheetHeader>
+    <>
+      <Sheet open={isOpen} onOpenChange={onClose}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1">
+                <Trophy className="h-5 w-5 text-primary" />
+                <SheetTitle>Histórico de @{nickname}</SheetTitle>
+              </div>
+              {profile?.id !== userId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsComparisonOpen(true)}
+                  className="gap-2"
+                >
+                  <Sword className="h-4 w-4" />
+                  Comparar ⚔️
+                </Button>
+              )}
+            </div>
+            <SheetDescription>Desempenho detalhado por rodada</SheetDescription>
+          </SheetHeader>
 
         <div className="mt-6 space-y-6">
           {isLoading ? (
@@ -195,5 +298,13 @@ export function RankingHistory({ userId, nickname, isOpen, onClose }: RankingHis
         </div>
       </SheetContent>
     </Sheet>
+
+    <ComparisonModal
+      isOpen={isComparisonOpen}
+      onClose={() => setIsComparisonOpen(false)}
+      currentUser={currentUserData}
+      targetUser={targetUserData}
+    />
+    </>
   );
 }

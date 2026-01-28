@@ -8,6 +8,7 @@ import { useRankingCompleto } from "@/hooks/useRankingFirebase";
 import { useRodadas } from "@/hooks/useJogosFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
 import { RankingHistory } from "@/components/RankingHistory";
+import { RankingEvolutionChart } from "@/components/ranking/RankingEvolutionChart";
 
 export default function Ranking() {
   const { profile } = useAuth();
@@ -205,6 +206,9 @@ export default function Ranking() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Gráfico de Evolução do Ranking */}
+        <RankingEvolutionChart />
 
         <Card className="shadow-card bg-muted/30">
           <CardContent className="pt-6">
