@@ -173,7 +173,7 @@ export default function Ranking() {
                 ranking.map((user, index) => (
                   <div
                     key={user.user_id}
-                    className={`grid grid-cols-[60px_1fr_80px_auto] md:grid-cols-[80px_1fr_100px_120px_120px_130px] gap-4 items-center rounded-lg border p-4 transition-smooth ${
+                    className={`grid grid-cols-[44px_1fr_70px_44px] md:grid-cols-[80px_1fr_100px_120px_120px_130px] gap-2 md:gap-4 items-center rounded-lg border p-3 md:p-4 transition-smooth ${
                       user.nickname === profile?.nickname
                         ? "border-primary bg-primary/5 shadow-hover"
                         : "border-border hover:bg-muted/50 hover:shadow-md"
@@ -188,20 +188,20 @@ export default function Ranking() {
                     }}
                   >
                     {/* Posição */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center">
                       <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full ${getMedalColor(
+                        className={`flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-full ${getMedalColor(
                           index + 1
-                        )} text-white font-bold shadow-sm`}
+                        )} text-white font-bold shadow-sm text-xs md:text-base`}
                       >
-                        {index < 3 ? <Trophy className="h-5 w-5" /> : index + 1}
+                        {index < 3 ? <Trophy className="h-4 w-4 md:h-5 md:w-5" /> : index + 1}
                       </div>
                     </div>
 
                     {/* Nome */}
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className={`font-semibold ${user.nickname === profile?.nickname ? "text-primary" : ""}`}>
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-semibold text-sm md:text-base truncate ${user.nickname === profile?.nickname ? "text-primary" : ""}`}>
                           @{user.nickname}
                         </div>
                         {/* Stats mobile */}
@@ -212,31 +212,33 @@ export default function Ranking() {
                     </div>
 
                     {/* Pontos */}
-                    <div className="text-right">
+                    <div className="flex justify-end">
                       <Badge
                         variant={index < 3 ? "default" : "secondary"}
-                        className="font-bold text-base px-3 py-1"
+                        className="font-bold text-sm md:text-base px-2 md:px-3 py-0.5 md:py-1"
                       >
                         {user.total_pontos}
                       </Badge>
                     </div>
 
                     {/* Botão Comparar - Mobile */}
-                    <div className="md:hidden flex justify-end">
+                    <div className="md:hidden flex justify-center">
                       {user.nickname !== profile?.nickname ? (
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCompareClick(user);
                           }}
-                          className="h-8 w-8 p-0"
+                          className="h-11 w-11 p-0 shrink-0"
                           title="Comparar"
                         >
-                          <Sword className="h-4 w-4" />
+                          <Sword className="h-5 w-5" />
                         </Button>
-                      ) : null}
+                      ) : (
+                        <div className="h-11 w-11" /> // Espaço vazio para manter alinhamento
+                      )}
                     </div>
 
                     {/* Resultados - apenas desktop */}
