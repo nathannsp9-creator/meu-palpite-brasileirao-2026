@@ -1,4 +1,4 @@
-import { useMemo, useRef, useLayoutEffect } from "react";
+import { useMemo, useRef, useLayoutEffect, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -10,8 +10,9 @@ import {
   CartesianGrid,
 } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useRankingHistory } from "@/hooks/useRankingHistory";
-import { Loader2 } from "lucide-react";
+import { Loader2, Maximize2, X } from "lucide-react";
 
 // Dados mockados para fallback inicial
 const MOCK_DATA = [
@@ -51,49 +52,106 @@ const getColorForUser = (userName: string, allUsers: string[], userColorsMap?: R
   return index >= 0 ? COLOR_PALETTE[index % COLOR_PALETTE.length] : "#6B7280";
 };
 
-// Custom Dot com efeito visual
-const CustomDot = (props: any) => {
-  const { cx, cy, fill } = props;
+// Neon Ring Dot - Anel elegante para cada rodada
+const RingDot = (props: any) => {
+  const { cx, cy, fill, stroke } = props;
+  if (!cx || !cy) return null;
+  
+  const color = stroke || fill;
+  
   return (
-    <g>
-      {/* Aura/Glow */}
-      <circle cx={cx} cy={cy} r={8} fill={fill} opacity={0.15} />
-      {/* Ponto principal com borda */}
-      <circle cx={cx} cy={cy} r={5} fill={fill} stroke="white" strokeWidth={1.5} />
+    <circle 
+      cx={cx} 
+      cy={cy} 
+      r={4} 
+      fill="#0f172a"
+      stroke={color}
+      strokeWidth={2}
+      opacity={0.9}
+    />
+  );
+};
+
+// Halo Effect para activeDot (apenas no hover)
+const HaloDot = (props: any) => {
+  const { cx, cy, fill, stroke } = props;
+  if (!cx || !cy) return null;
+  
+  const color = stroke || fill;
+  
+  return (
+    <g filter="url(#glow)">
+      {/* Halo externo grande - transparente */}
+      <circle 
+        cx={cx} 
+        cy={cy} 
+        r={14} 
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        opacity={0.6}
+      />
+      {/* Halo médio */}
+      <circle 
+        cx={cx} 
+        cy={cy} 
+        r={10} 
+        fill="none"
+        stroke={color}
+        strokeWidth={2.5}
+        opacity={0.8}
+      />
+      {/* Centro brilhante */}
+      <circle 
+        cx={cx} 
+        cy={cy} 
+        r={5} 
+        fill={color}
+        opacity={0.9}
+      />
     </g>
   );
 };
 
-// Custom Tooltip com estilo dark e vibrante
+// Custom Tooltip com glassmorphism minimalista
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border border-primary/40 bg-background/98 p-4 shadow-2xl backdrop-blur-sm">
-        <p className="mb-2 font-bold text-foreground">{label}</p>
-        {payload.map((entry: any, index: number) => (
-          <div key={index} className="flex items-center gap-2">
-            <div
-              className="h-3 w-3 rounded-full"
-              style={{ backgroundColor: entry.color }}
-            />
-            <span style={{ color: entry.color }} className="font-semibold">
-              {entry.name}:
-            </span>
-            <span className="text-foreground">{entry.value}º lugar</span>
-          </div>
-        ))}
+      <div className="rounded-lg border border-white/5 bg-slate-950/90 p-3 shadow-2xl backdrop-blur-xl">
+        <p className="mb-2 font-semibold text-white text-xs tracking-widest uppercase opacity-70">{label}</p>
+        <div className="space-y-1.5">
+          {payload.map((entry: any, index: number) => (
+            <div key={index} className="flex items-center gap-2">
+              <div
+                className="h-2 w-2 rounded-full"
+                style={{ 
+                  backgroundColor: entry.color,
+                  boxShadow: `0 0 6px ${entry.color}`
+                }}
+              />
+              <span style={{ color: entry.color }} className="text-xs font-medium">
+                {entry.name}
+              </span>
+              <span className="text-gray-400 text-xs ml-auto">
+                {entry.value}º
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
   return null;
 };
 
-// Definir filtro de glow para o SVG
+// Defs com filtros suaves e modernos
 const GlowDefs = () => (
   <defs>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+    {/* Glow suave e difuso para as linhas */}
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="coloredBlur" />
       <feMerge>
+        <feMergeNode in="coloredBlur" />
         <feMergeNode in="coloredBlur" />
         <feMergeNode in="SourceGraphic" />
       </feMerge>
@@ -104,6 +162,7 @@ const GlowDefs = () => (
 export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
   const { data: realData, isLoading, userColors } = useRankingHistory();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Usar dados reais se disponíveis, caso contrário usar mock
   const chartData = data || realData || MOCK_DATA;
@@ -171,13 +230,25 @@ export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
   }
 
   return (
-    <Card className="shadow-card border-primary/20 bg-background/50 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span className="text-2xl">📈</span>
-          Evolução do Ranking
-        </CardTitle>
-        <CardDescription>Acompanhe como as posições mudaram ao longo das rodadas</CardDescription>
+    <>
+      <Card className="shadow-card border-primary/20 bg-background/50 backdrop-blur-sm">
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div className="flex-1">
+          <CardTitle className="flex items-center gap-2">
+            <span className="text-2xl">📈</span>
+            Evolução do Ranking
+          </CardTitle>
+          <CardDescription>Acompanhe como as posições mudaram ao longo das rodadas</CardDescription>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsFullscreen(true)}
+          className="ml-2"
+          title="Ver em tela cheia"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </Button>
       </CardHeader>
       <CardContent>
         <div className="w-full overflow-x-auto overflow-y-hidden pb-4" ref={scrollContainerRef}>
@@ -191,27 +262,27 @@ export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
                   {/* SVG Defs para efeitos */}
                   <GlowDefs />
 
-                  {/* Grid com estilo moderno */}
+                  {/* Grid ultra-minimalista - quase invisível */}
                   <CartesianGrid
-                    strokeDasharray="5 5"
-                    stroke="#374151"
-                    opacity={0.2}
+                    strokeDasharray="3 3"
+                    stroke="#444444"
+                    strokeOpacity={0.15}
                     vertical={false}
                   />
 
-                  {/* Eixo X - Rodadas */}
+                  {/* Eixo X - Rodadas (minimalista) */}
                   <XAxis
                     dataKey="rodada"
-                    stroke="#6B7280"
-                    style={{ fontSize: "0.875rem", fontWeight: 500 }}
-                    tickLine={{ stroke: "#4B5563" }}
+                    stroke="#555555"
+                    style={{ fontSize: "0.75rem", fontWeight: 400, fill: "#888888" }}
+                    tickLine={{ stroke: "#444444", strokeOpacity: 0.3 }}
                   />
 
-                  {/* Eixo Y - Posição (Invertido: 1 no TOPO) */}
+                  {/* Eixo Y - Posição (Invertido: 1 no TOPO, minimalista) */}
                   <YAxis
                     reversed={true}
-                    stroke="#6B7280"
-                    style={{ fontSize: "0.875rem", fontWeight: 500 }}
+                    stroke="#555555"
+                    style={{ fontSize: "0.75rem", fontWeight: 400, fill: "#888888" }}
                     ticks={Array.from({ length: Math.max(...chartData.flatMap((row) =>
                       usuarios.map((user) => (typeof row[user] === "number" ? row[user] : 0))
                     )) }, (_, i) => i + 1)}
@@ -223,9 +294,9 @@ export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
                       angle: -90,
                       position: "insideLeft",
                       offset: 10,
-                      style: { fill: "#9CA3AF" },
+                      style: { fill: "#888888", fontSize: "0.75rem", fontWeight: 400 },
                     }}
-                    tickLine={{ stroke: "#4B5563" }}
+                    tickLine={{ stroke: "#444444", strokeOpacity: 0.3 }}
                   />
 
                   {/* Tooltip customizado */}
@@ -241,7 +312,7 @@ export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
                     textAnchor="middle"
                   />
 
-                  {/* Linhas para cada usuário com efeito glow */}
+                  {/* Linhas para cada usuário - com neon rings */}
                   {usuarios.map((usuario) => {
                     const color = getColorForUser(usuario, usuarios, userColors);
                     return (
@@ -250,12 +321,14 @@ export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
                         type="monotone"
                         dataKey={usuario}
                         stroke={color}
-                        strokeWidth={3}
-                        dot={<CustomDot fill={color} />}
-                        activeDot={{ r: 7, filter: "url(#glow)" }}
+                        strokeWidth={2.5}
+                        dot={<RingDot stroke={color} fill={color} />}
+                        activeDot={<HaloDot fill={color} stroke={color} />}
                         isAnimationActive={true}
                         name={usuario}
-                        filter="url(#glow)"
+                        style={{
+                          filter: `drop-shadow(0px 0px 6px ${color}a0)`,
+                        }}
                       />
                     );
                   })}
@@ -287,5 +360,111 @@ export function RankingEvolutionChart({ data }: RankingEvolutionChartProps) {
         </div>
       </CardContent>
     </Card>
+
+    {/* Modal Fullscreen */}
+    {isFullscreen && (
+      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        {/* Header do Modal */}
+        <div className="flex items-center justify-between border-b border-primary/10 bg-background/50 px-4 py-3 backdrop-blur-sm">
+          <div>
+            <h2 className="text-lg font-bold">📈 Evolução do Ranking - Tela Cheia</h2>
+            <p className="text-xs text-muted-foreground">Arraste para o lado ou gire a tela para visualizar melhor</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsFullscreen(false)}
+            className="ml-4"
+            title="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Conteúdo do Modal - Gráfico em altura maior */}
+        <div className="flex-1 overflow-hidden p-4">
+          <div className="w-full overflow-x-auto overflow-y-hidden pb-4 h-full" ref={scrollContainerRef}>
+            <div style={{ width: chartWidth }} className="min-w-full">
+              <div className="h-[70vh]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+                  >
+                    <GlowDefs />
+
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#444444"
+                      strokeOpacity={0.15}
+                      vertical={false}
+                    />
+
+                    <XAxis
+                      dataKey="rodada"
+                      stroke="#555555"
+                      style={{ fontSize: "0.75rem", fontWeight: 400, fill: "#888888" }}
+                      tickLine={{ stroke: "#444444", strokeOpacity: 0.3 }}
+                    />
+
+                    <YAxis
+                      reversed={true}
+                      stroke="#555555"
+                      style={{ fontSize: "0.75rem", fontWeight: 400, fill: "#888888" }}
+                      ticks={Array.from({ length: Math.max(...chartData.flatMap((row) =>
+                        usuarios.map((user) => (typeof row[user] === "number" ? row[user] : 0))
+                      )) }, (_, i) => i + 1)}
+                      domain={[Math.max(...chartData.flatMap((row) =>
+                        usuarios.map((user) => (typeof row[user] === "number" ? row[user] : 0))
+                      )), 1]}
+                      label={{
+                        value: "Posição",
+                        angle: -90,
+                        position: "insideLeft",
+                        offset: 10,
+                        style: { fill: "#888888", fontSize: "0.75rem", fontWeight: 400 },
+                      }}
+                      tickLine={{ stroke: "#444444", strokeOpacity: 0.3 }}
+                    />
+
+                    <Tooltip
+                      content={<CustomTooltip />}
+                      cursor={{ stroke: "rgba(59, 130, 246, 0.2)", strokeWidth: 2 }}
+                    />
+
+                    <Legend
+                      wrapperStyle={{ paddingTop: "20px" }}
+                      iconType="line"
+                      textAnchor="middle"
+                    />
+
+                    {usuarios.map((usuario) => {
+                      const color = getColorForUser(usuario, usuarios, userColors);
+                      return (
+                        <Line
+                          key={usuario}
+                          type="monotone"
+                          dataKey={usuario}
+                          stroke={color}
+                          strokeWidth={2.5}
+                          dot={<RingDot stroke={color} fill={color} />}
+                          activeDot={<HaloDot fill={color} stroke={color} />}
+                          isAnimationActive={true}
+                          name={usuario}
+                          style={{
+                            filter: `drop-shadow(0px 0px 6px ${color}a0)`,
+                          }}
+                        />
+                      );
+                    })}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
