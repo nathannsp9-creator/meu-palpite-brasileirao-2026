@@ -19,8 +19,10 @@ interface ComparisonModalProps {
 }
 
 export function ComparisonModal({ isOpen, onClose, currentUser, targetUser }: ComparisonModalProps) {
-  // Proteção anti-crash crítica
-  if (!currentUser || !targetUser) return null;
+  // Não renderiza o Dialog se não houver dados, mas permite o controle do estado isOpen
+  if (!isOpen || !currentUser || !targetUser) {
+    return null;
+  }
 
   // Calcular taxa de acerto
   const currentAccuracy = currentUser.total_palpites > 0 

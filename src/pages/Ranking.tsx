@@ -2,18 +2,22 @@ import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trophy, TrendingUp, Target, Loader2, Award } from "lucide-react";
+import { Trophy, TrendingUp, Target, Loader2, Award, Sword } from "lucide-react";
 import { useRankingCompleto } from "@/hooks/useRankingFirebase";
 import { useRodadas } from "@/hooks/useJogosFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
 import { RankingHistory } from "@/components/RankingHistory";
 import { RankingEvolutionChart } from "@/components/ranking/RankingEvolutionChart";
+import { ComparisonModal } from "@/components/ranking/ComparisonModal";
 
 export default function Ranking() {
   const { profile } = useAuth();
   const [rodadaFiltro, setRodadaFiltro] = useState<string>("todas");
   const [selectedUser, setSelectedUser] = useState<{ userId: string; nickname: string } | null>(null);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [comparisonUsers, setComparisonUsers] = useState<{ current: any; target: any } | null>(null);
   
   const { data: rodadas } = useRodadas();
   const { data: ranking, isLoading } = useRankingCompleto(
@@ -33,6 +37,37 @@ export default function Ranking() {
     if (posicao === 2) return "bg-gradient-to-br from-gray-300 to-gray-500";
     if (posicao === 3) return "bg-gradient-to-br from-orange-400 to-orange-600";
     return "bg-muted";
+  };
+
+  const handleCompareClick = (targetUser: any) => {
+    if (profile?.nickname === targetUser.nickname) {
+      return; // Não permite comparar consigo mesmo
+    }
+
+    const currentUserData = userEntry ? {
+      user_id: profile?.id || "",
+      nickname: profile?.nickname || "",
+      total_pontos: userEntry.total_pontos,
+      acertos_resultado: userEntry.acertos_resultado,
+      acertos_placar: userEntry.acertos_placar,
+      total_palpites: userEntry.total_palpites,
+    } : null;
+
+    const targetUserData = {
+      user_id: targetUser.user_id,
+      nickname: targetUser.nickname,
+      total_pontos: targetUser.total_pontos,
+      acertos_resultado: targetUser.acertos_resultado,
+      acertos_placar: targetUser.acertos_placar,
+      total_palpites: targetUser.total_palpites,
+    };
+
+    console.log("Comparação clicada:", { currentUserData, targetUserData });
+
+    if (currentUserData && targetUserData) {
+      setComparisonUsers({ current: currentUserData, target: targetUserData });
+      setComparisonOpen(true);
+    }
   };
 
   return (
@@ -118,12 +153,13 @@ export default function Ranking() {
           <CardContent>
             <div className="space-y-2">
               {/* Header da tabela - apenas desktop */}
-              <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_120px_120px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground border-b">
+              <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_120px_120px_130px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground border-b">
                 <div>Posição</div>
                 <div>Participante</div>
                 <div className="text-right">Pontos</div>
                 <div className="text-right">Acertos</div>
                 <div className="text-right">Cravadas</div>
+                <div className="text-center">Ações</div>
               </div>
 
               {/* Linhas do ranking */}
@@ -137,7 +173,7 @@ export default function Ranking() {
                 ranking.map((user, index) => (
                   <div
                     key={user.user_id}
-                    className={`grid grid-cols-[60px_1fr_80px] md:grid-cols-[80px_1fr_100px_120px_120px] gap-4 items-center rounded-lg border p-4 transition-smooth cursor-pointer ${
+                    className={`grid grid-cols-[60px_1fr_80px_auto] md:grid-cols-[80px_1fr_100px_120px_120px_130px] gap-4 items-center rounded-lg border p-4 transition-smooth ${
                       user.nickname === profile?.nickname
                         ? "border-primary bg-primary/5 shadow-hover"
                         : "border-border hover:bg-muted/50 hover:shadow-md"
@@ -185,6 +221,24 @@ export default function Ranking() {
                       </Badge>
                     </div>
 
+                    {/* Botão Comparar - Mobile */}
+                    <div className="md:hidden flex justify-end">
+                      {user.nickname !== profile?.nickname ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCompareClick(user);
+                          }}
+                          className="h-8 w-8 p-0"
+                          title="Comparar"
+                        >
+                          <Sword className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+
                     {/* Resultados - apenas desktop */}
                     <div className="hidden md:flex justify-end">
                       <Badge variant="outline" className="gap-1">
@@ -199,6 +253,27 @@ export default function Ranking() {
                         <Award className="h-3 w-3 text-yellow-500" />
                         {user.acertos_placar}
                       </Badge>
+                    </div>
+
+                    {/* Botão Comparar - Desktop */}
+                    <div className="hidden md:flex justify-center">
+                      {user.nickname !== profile?.nickname ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCompareClick(user);
+                          }}
+                          className="gap-2"
+                          title="Comparar"
+                        >
+                          <Sword className="h-4 w-4" />
+                          Comparar
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </div>
                   </div>
                 ))
@@ -234,6 +309,13 @@ export default function Ranking() {
           onClose={() => setSelectedUser(null)}
         />
       )}
+
+      <ComparisonModal
+        isOpen={comparisonOpen}
+        onClose={() => setComparisonOpen(false)}
+        currentUser={comparisonUsers?.current || null}
+        targetUser={comparisonUsers?.target || null}
+      />
     </Layout>
   );
 }
