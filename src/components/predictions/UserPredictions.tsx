@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target, History, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Clock, Save, AlertCircle, Loader2, CheckCircle2, Trophy, Target, History, Eye, Dices, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { useRodadaAtual, useRodadas, useJogosPorRodada, calcularPontos } from "@/hooks/useJogosFirebase";
 import { useMeusPalpites, useSalvarPalpitesBatch } from "@/hooks/usePalpitesFirebase";
@@ -18,6 +19,26 @@ interface PalpiteLocal {
   placarCasa: string;
   placarVisitante: string;
 }
+
+// Função para gerar placares aleatórios realistas com ponderação
+const generateRandomScoresWeighted = (): { home: number; away: number } => {
+  // Array com placares comuns repetidos para dar peso a resultados mais realistas
+  const scorePool = [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 3, 4];
+  const randomHome = scorePool[Math.floor(Math.random() * scorePool.length)];
+  const randomAway = scorePool[Math.floor(Math.random() * scorePool.length)];
+  return { home: randomHome, away: randomAway };
+};
+
+// Função para gerar palpites aleatórios para todos os jogos
+const generateRandomGuessesForAllGames = (
+  games: any[]
+): { [gameId: string]: { home: number; away: number } } => {
+  const guesses: { [gameId: string]: { home: number; away: number } } = {};
+  games.forEach((game) => {
+    guesses[game.id] = generateRandomScoresWeighted();
+  });
+  return guesses;
+};
 
 // Função helper para inferir o resultado automaticamente
 const inferirResultado = (placarCasa?: string, placarVisitante?: string): "casa" | "empate" | "visitante" | null => {
@@ -50,6 +71,8 @@ export default function UserPredictions() {
   const [palpites, setPalpites] = useState<Record<string, PalpiteLocal>>({});
   const [rodadaSelecionadaId, setRodadaSelecionadaId] = useState<string | null>(null);
   const [transparenciaOpen, setTransparenciaOpen] = useState(false);
+  const [isSurpresinhaOpen, setIsSurpresinhaOpen] = useState(false);
+  const [randomGuesses, setRandomGuesses] = useState<{ [gameId: string]: { home: number; away: number } } | null>(null);
 
   const { data: rodadaAtual, isLoading: loadingRodada } = useRodadaAtual();
   const { data: todasRodadas, isLoading: loadingTodasRodadas } = useRodadas();
@@ -170,6 +193,76 @@ export default function UserPredictions() {
       }, 1000);
     } catch (error: any) {
       console.error("Erro ao salvar palpites:", error);
+      toast.error(error?.message || "Erro ao salvar palpites");
+    }
+  };
+
+  const handleAbrirSurpresinha = () => {
+    if (!jogos || jogos.length === 0) {
+      toast.error("Nenhum jogo disponível para gerar palpites!");
+      return;
+    }
+    const newGuesses = generateRandomGuessesForAllGames(jogos);
+    setRandomGuesses(newGuesses);
+    setIsSurpresinhaOpen(true);
+  };
+
+  const handleRerollSurpresinha = () => {
+    if (!jogos || jogos.length === 0) return;
+    const newGuesses = generateRandomGuessesForAllGames(jogos);
+    setRandomGuesses(newGuesses);
+  };
+
+  const handleAceitarSurpresinha = async () => {
+    if (!randomGuesses || !rodada) {
+      toast.error("Erro ao processar palpites!");
+      return;
+    }
+
+    // Converter randomGuesses para o formato de PalpiteLocal
+    const newPalpites = { ...palpites };
+    Object.entries(randomGuesses).forEach(([gameId, scores]) => {
+      newPalpites[gameId] = {
+        jogoId: gameId,
+        placarCasa: scores.home.toString(),
+        placarVisitante: scores.away.toString(),
+      };
+    });
+
+    // Atualizar estado de palpites
+    setPalpites(newPalpites);
+    setIsSurpresinhaOpen(false);
+
+    // Tentar salvar automaticamente
+    const palpitesParaSalvar = Object.values(newPalpites)
+      .filter(isPalpiteCompleto)
+      .map((p) => ({
+        jogoId: p.jogoId,
+        palpiteCasa: parseInt(p.placarCasa),
+        palpiteVisitante: parseInt(p.placarVisitante),
+      }));
+
+    if (palpitesParaSalvar.length === 0) {
+      toast.error("Nenhum palpite válido gerado!");
+      return;
+    }
+
+    try {
+      await salvarPalpitesBatch.mutateAsync({
+        rodadaId: rodada.id,
+        palpites: palpitesParaSalvar,
+      });
+
+      toast.success(
+        `🎁 ${palpitesParaSalvar.length} palpite(s) da Surpresinha salvo(s) com sucesso!`,
+        { duration: 4000 }
+      );
+
+      setTimeout(() => {
+        navigate("/");
+      }, 1000);
+    } catch (error: any) {
+      console.error("Erro ao salvar palpites da Surpresinha:", error);
       toast.error(error?.message || "Erro ao salvar palpites");
     }
   };
@@ -321,6 +414,18 @@ export default function UserPredictions() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Botão Surpresinha */}
+      {isVisualizandoRodadaAtual && podeReceberPalpites && (
+        <Button
+          onClick={handleAbrirSurpresinha}
+          className="w-full h-auto py-3 md:py-4 rounded-lg text-base font-semibold bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg whitespace-normal"
+          disabled={!jogosDisponiveis}
+        >
+          <Gift className="h-5 w-5 mr-2" />
+          🎁 Surpresinha! (Gerar Palpites Aleatórios)
+        </Button>
+      )}
 
       {/* Alerta de Modo Histórico */}
       {!isVisualizandoRodadaAtual && (
@@ -635,6 +740,121 @@ export default function UserPredictions() {
       </Card>
     )}
     
+    {/* Modal Surpresinha */}
+    <Dialog open={isSurpresinhaOpen} onOpenChange={setIsSurpresinhaOpen}>
+      <DialogContent className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-2xl">
+            <Gift className="h-6 w-6 text-purple-600" />
+            Surpresinha - Palpites Aleatórios
+          </DialogTitle>
+        </DialogHeader>
+
+        {randomGuesses ? (
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] gap-6">
+            {/* Lista de Jogos */}
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {jogos.map((jogo: any) => {
+                const guess = randomGuesses[jogo.id];
+                return (
+                  <div
+                    key={jogo.id}
+                    className="p-4 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="space-y-3">
+                      {/* Times */}
+                      <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                        <div className="text-center">
+                          {jogo.logo_casa ? (
+                            <img
+                              src={`${URL_ESCUDOS}${jogo.logo_casa}`}
+                              alt={jogo.time_casa}
+                              className="h-8 w-8 object-contain mx-auto mb-1"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="text-lg">🏠</div>
+                          )}
+                          <div className="text-xs font-medium truncate">
+                            {jogo.time_casa}
+                          </div>
+                        </div>
+
+                        <div className="text-sm font-bold text-muted-foreground">VS</div>
+
+                        <div className="text-center">
+                          {jogo.logo_visitante ? (
+                            <img
+                              src={`${URL_ESCUDOS}${jogo.logo_visitante}`}
+                              alt={jogo.time_visitante}
+                              className="h-8 w-8 object-contain mx-auto mb-1"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="text-lg">✈️</div>
+                          )}
+                          <div className="text-xs font-medium truncate">
+                            {jogo.time_visitante}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Placar Gerado */}
+                      {guess && (
+                        <div className="flex items-center justify-center gap-3 bg-primary/10 p-2 rounded">
+                          <span className="text-xl font-bold">{guess.home}</span>
+                          <span className="text-muted-foreground font-semibold">×</span>
+                          <span className="text-xl font-bold">{guess.away}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="flex flex-row gap-3 w-full md:flex-col md:justify-start">
+              {/* Botão Reroll */}
+              <Button
+                onClick={handleRerollSurpresinha}
+                variant="outline"
+                className="flex-1 md:h-32 flex flex-col items-center justify-center gap-2 hover:bg-accent py-3 md:py-auto"
+              >
+                <Dices className="h-5 md:h-8 w-5 md:w-8" />
+                <span className="text-xs md:text-sm font-semibold">Rolar</span>
+                <span className="hidden md:inline text-xs text-muted-foreground">Gerar novos</span>
+              </Button>
+
+              {/* Botão Aceitar */}
+              <Button
+                onClick={handleAceitarSurpresinha}
+                className="flex-1 md:h-32 flex flex-col items-center justify-center gap-2 bg-green-600 hover:bg-green-700 py-3 md:py-auto"
+                disabled={salvarPalpitesBatch.isPending}
+              >
+                {salvarPalpitesBatch.isPending ? (
+                  <>
+                    <Loader2 className="h-5 md:h-6 w-5 md:w-6 animate-spin" />
+                    <span className="text-xs md:text-sm">Salvando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-5 md:h-8 w-5 md:w-8" />
+                    <span className="text-xs md:text-sm font-semibold">Aceitar!</span>
+                    <span className="hidden md:inline text-xs">Salvar Palpites</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+
     {/* Modal de Transparência */}
     <PalpitesTransparencia open={transparenciaOpen} onOpenChange={setTransparenciaOpen} />
   </div>
