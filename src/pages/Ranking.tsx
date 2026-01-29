@@ -250,8 +250,8 @@ export default function Ranking() {
                           @{user.nickname}
                         </div>
                         {/* Stats mobile */}
-                        <div className="md:hidden text-xs text-muted-foreground">
-                          🎯 {user.acertos_resultado} • 🏆 {user.acertos_placar}
+                        <div className="md:hidden text-xs text-muted-foreground gap-1">
+                          🎯 {user.acertos_resultado} • ✅ {Math.max(0, (user.acertos_resultado || 0) - (user.acertos_placar || 0))} • 🏆 {user.acertos_placar}
                         </div>
                       </div>
                     </div>
