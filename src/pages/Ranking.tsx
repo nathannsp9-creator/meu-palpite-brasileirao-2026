@@ -131,12 +131,56 @@ export default function Ranking() {
               <Target className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{taxaAcerto !== null ? `${taxaAcerto}%` : "-"}</div>
-              <p className="text-xs text-muted-foreground">
-                {userEntry
-                  ? `🎯 ${userEntry.acertos_resultado} acertos • 🏆 ${userEntry.acertos_placar} cravadas`
-                  : "Faça palpites para gerar estatísticas"}
-              </p>
+              {userEntry ? (
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  {/* Acertos (Geral) */}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="text-3xl font-bold text-primary">
+                      {userEntry.total_palpites > 0
+                        ? Math.round((userEntry.acertos_resultado / userEntry.total_palpites) * 100)
+                        : 0}
+                      %
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium">ACERTOS</p>
+                    <p className="text-xs text-muted-foreground">({userEntry.acertos_resultado})</p>
+                  </div>
+
+                  {/* Resultados (3pts) */}
+                  <div className="flex flex-col items-center gap-1">
+                    {(() => {
+                      const exact3 = Math.max(0, (userEntry.acertos_resultado || 0) - (userEntry.acertos_placar || 0));
+                      return (
+                        <>
+                          <div className="text-3xl font-bold text-blue-500">
+                            {userEntry.total_palpites > 0
+                              ? Math.round((exact3 / userEntry.total_palpites) * 100)
+                              : 0}
+                            %
+                          </div>
+                          <p className="text-xs text-muted-foreground font-medium">RESULTADOS</p>
+                          <p className="text-xs text-muted-foreground">({exact3})</p>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Cravadas (5pts) */}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="text-3xl font-bold text-yellow-500">
+                      {userEntry.total_palpites > 0
+                        ? Math.round((userEntry.acertos_placar / userEntry.total_palpites) * 100)
+                        : 0}
+                      %
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium">CRAVADAS</p>
+                    <p className="text-xs text-muted-foreground">({userEntry.acertos_placar})</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center">
+                  Faça palpites para gerar estatísticas
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
