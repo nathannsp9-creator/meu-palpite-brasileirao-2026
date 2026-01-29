@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trophy, TrendingUp, Target, Loader2, Award, Sword } from "lucide-react";
+import { Trophy, TrendingUp, Target, Loader2, Award, Sword, CheckCircle2 } from "lucide-react";
 import { useRankingCompleto } from "@/hooks/useRankingFirebase";
 import { useRodadas } from "@/hooks/useJogosFirebase";
 import { useAuth } from "@/contexts/AuthContextFirebase";
@@ -153,11 +153,12 @@ export default function Ranking() {
           <CardContent>
             <div className="space-y-2">
               {/* Header da tabela - apenas desktop */}
-              <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_120px_120px_130px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground border-b">
+              <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_100px_100px_100px_130px] gap-4 px-4 py-2 text-sm font-medium text-muted-foreground border-b">
                 <div>Posição</div>
                 <div>Participante</div>
                 <div className="text-right">Pontos</div>
                 <div className="text-right">Acertos</div>
+                <div className="text-right">Resultados</div>
                 <div className="text-right">Cravadas</div>
                 <div className="text-center">Ações</div>
               </div>
@@ -173,7 +174,7 @@ export default function Ranking() {
                 ranking.map((user, index) => (
                   <div
                     key={user.user_id}
-                    className={`grid grid-cols-[44px_1fr_70px_44px] md:grid-cols-[80px_1fr_100px_120px_120px_130px] gap-2 md:gap-4 items-center rounded-lg border p-3 md:p-4 transition-smooth ${
+                    className={`grid grid-cols-[44px_1fr_70px_44px] md:grid-cols-[80px_1fr_100px_100px_100px_100px_130px] gap-2 md:gap-4 items-center rounded-lg border p-3 md:p-4 transition-smooth ${
                       user.nickname === profile?.nickname
                         ? "border-primary bg-primary/5 shadow-hover"
                         : "border-border hover:bg-muted/50 hover:shadow-md"
@@ -241,7 +242,7 @@ export default function Ranking() {
                       )}
                     </div>
 
-                    {/* Resultados - apenas desktop */}
+                    {/* Acertos (Total: 3pts + 5pts) - apenas desktop */}
                     <div className="hidden md:flex justify-end">
                       <Badge variant="outline" className="gap-1">
                         <Target className="h-3 w-3" />
@@ -249,7 +250,15 @@ export default function Ranking() {
                       </Badge>
                     </div>
 
-                    {/* Cravadas - apenas desktop */}
+                    {/* Resultados (apenas 3pts) - apenas desktop */}
+                    <div className="hidden md:flex justify-end">
+                      <Badge variant="outline" className="gap-1">
+                        <Target className="h-3 w-3" />
+                        {Math.max(0, (user.acertos_resultado || 0) - (user.acertos_placar || 0))}
+                      </Badge>
+                    </div>
+
+                    {/* Cravadas (apenas 5pts) - apenas desktop */}
                     <div className="hidden md:flex justify-end">
                       <Badge variant="outline" className="gap-1">
                         <Award className="h-3 w-3 text-yellow-500" />
@@ -292,7 +301,11 @@ export default function Ranking() {
             <div className="flex flex-col sm:flex-row gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <Target className="h-4 w-4 text-primary" />
-                <span><strong>Acertos (3pts+):</strong> Acertou vencedor/empate (inclui cravadas)</span>
+                <span><strong>Acertos:</strong> Contabiliza resultados corretos e cravadas (soma de 3pts + 5pts)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                <span><strong>Resultados (3pts):</strong> Acertou apenas vencedor/empate</span>
               </div>
               <div className="flex items-center gap-2">
                 <Award className="h-4 w-4 text-yellow-500" />

@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Target, Award } from "lucide-react";
+import { TrendingUp, Target, Award, CheckCircle2 } from "lucide-react";
 
 interface ComparisonData {
   user_id: string;
@@ -47,6 +47,10 @@ export function ComparisonModal({ isOpen, onClose, currentUser, targetUser }: Co
 
   const pointsColors = getMetricColor(currentUser.total_pontos, targetUser.total_pontos);
   const hitsColors = getMetricColor(currentUser.acertos_resultado, targetUser.acertos_resultado);
+  const resultsColors = getMetricColor(
+    Math.max(0, (currentUser.acertos_resultado || 0) - (currentUser.acertos_placar || 0)),
+    Math.max(0, (targetUser.acertos_resultado || 0) - (targetUser.acertos_placar || 0))
+  );
   const exactColors = getMetricColor(currentUser.acertos_placar, targetUser.acertos_placar);
   const accuracyColors = getMetricColor(currentAccuracy, targetAccuracy);
 
@@ -105,6 +109,30 @@ export function ComparisonModal({ isOpen, onClose, currentUser, targetUser }: Co
               <Badge className={`text-lg px-3 py-1 ${hitsColors.target.includes('green') ? 'bg-green-600' : 'bg-muted'}`}>
                 <Target className="h-4 w-4 mr-2" />
                 {targetUser.acertos_resultado ?? 0}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Métrica: Resultados (3pts) - NOVO */}
+          <div className="grid grid-cols-3 gap-4 items-center rounded-lg border p-4 bg-muted/30">
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground uppercase font-semibold">Você</span>
+              <Badge className={`text-lg px-3 py-1 ${resultsColors.current.includes('green') ? 'bg-blue-600' : 'bg-muted'}`}>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                {Math.max(0, (currentUser.acertos_resultado || 0) - (currentUser.acertos_placar || 0))}
+              </Badge>
+            </div>
+            
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground uppercase font-semibold">Resultados</span>
+              <Badge variant="outline" className="text-lg">✓</Badge>
+            </div>
+            
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground uppercase font-semibold">{targetUser.nickname}</span>
+              <Badge className={`text-lg px-3 py-1 ${resultsColors.target.includes('green') ? 'bg-blue-600' : 'bg-muted'}`}>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                {Math.max(0, (targetUser.acertos_resultado || 0) - (targetUser.acertos_placar || 0))}
               </Badge>
             </div>
           </div>
